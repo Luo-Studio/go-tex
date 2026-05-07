@@ -276,9 +276,9 @@ func parseText(p *Parser) (Node, error) {
 	p.advance()
 	// Switch to text mode for the body, then restore.
 	prev := p.mode
-	p.mode = ModeText
+	p.switchMode(ModeText)
 	arg, err := parseFunctionArg(p, cmd)
-	p.mode = prev
+	p.switchMode(prev)
 	if err != nil {
 		return nil, err
 	}

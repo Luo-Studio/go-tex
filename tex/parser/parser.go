@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/luo-studio/go-tex/tex/lexer"
+	"github.com/luo-studio/go-tex/tex/macroexp"
 	"github.com/luo-studio/go-tex/tex/source"
 	"github.com/luo-studio/go-tex/tex/symbols"
 )
@@ -63,19 +64,35 @@ func Parse(input string) ([]Node, error) {
 
 // Parser holds the recursive-descent state. Construct with newParser.
 type Parser struct {
-	lex  *lexer.Lexer
-	cur  lexer.Token
-	mode Mode
+	gullet *macroexp.Expander
+	cur    lexer.Token
+	mode   Mode
 }
 
 func newParser(input string) *Parser {
-	p := &Parser{lex: lexer.New(input), mode: ModeMath}
+	p := &Parser{gullet: macroexp.New(input, macroexp.ModeMath), mode: ModeMath}
 	p.advance()
 	return p
 }
 
 func (p *Parser) advance() {
-	p.cur = p.lex.Lex()
+	t, err := p.gullet.Next()
+	if err != nil {
+		// Macro expansion errors surface here as a synthetic EOF; the
+		// resulting parse will fail with a clear error in the caller.
+		t = lexer.EOF(p.gullet.Pos())
+	}
+	p.cur = t
+}
+
+// switchMode keeps the gullet's view of the current mode in sync.
+func (p *Parser) switchMode(m Mode) {
+	p.mode = m
+	if m == ModeText {
+		p.gullet.SetMode(macroexp.ModeText)
+	} else {
+		p.gullet.SetMode(macroexp.ModeMath)
+	}
 }
 
 func (p *Parser) consumeSpaces() {
