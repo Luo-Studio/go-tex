@@ -1,12 +1,21 @@
 // Package pdf renders a [layout.DisplayList] to a PDF document via
 // codeberg.org/go-pdf/fpdf, with embedded KaTeX TTFs from tex/fonts.
 //
+// Two entry points:
+//
+//   - [Render] / [RenderTo] produce a standalone single-page PDF whose
+//     page is sized exactly to the math + Padding. Suitable for
+//     emitting a math expression as its own document.
+//
+//   - [DrawInto] draws onto an existing *fpdf.Fpdf at a caller-chosen
+//     (x, y). Use this when embedding math into a larger PDF you are
+//     already constructing — fonts are registered into the supplied
+//     document on first use and reused thereafter.
+//
 // Coordinate conventions: fpdf and the layout DisplayList both use a
 // top-left origin with Y growing downward, so coordinates pass through
 // in the same orientation. Sizes are in points (1pt = 1/72 inch) by
-// default; the page extent is sized to the DisplayList's bounding box
-// + Padding so the math sits flush against the page edges, suitable
-// for embedding into larger documents.
+// default.
 package pdf
 
 import (
@@ -27,21 +36,46 @@ type Options struct {
 	// FontSize is the points-per-em conversion; with FontSize=12 a
 	// glyph rendered at scale 1.0 prints at 12pt.
 	FontSize float64
-	// Padding is added on every side of the bounding box.
+	// Padding is added on every side of the bounding box. For DrawInto
+	// it shifts the math inward from the supplied (x, y); set to 0 for
+	// flush placement.
 	Padding float64
 	// StrokeWidth is the line width for un-filled paths.
 	StrokeWidth float64
 }
 
 // DefaultOptions returns FontSize=12, Padding=4, StrokeWidth=0.5 —
-// reasonable defaults for math-in-document embedding.
+// reasonable defaults for math-as-its-own-document. For embedding,
+// see [EmbedDefaults].
 func DefaultOptions() Options {
 	return Options{FontSize: 12, Padding: 4, StrokeWidth: 0.5}
 }
 
+// EmbedDefaults returns FontSize=12, Padding=0, StrokeWidth=0.5 —
+// suitable for embedding into existing PDF documents where the caller
+// controls the surrounding whitespace through (x, y) positioning.
+func EmbedDefaults() Options {
+	return Options{FontSize: 12, Padding: 0, StrokeWidth: 0.5}
+}
+
+// Size returns the rendered math's outer dimensions in fpdf units
+// (typically points) including Padding on all four sides. Useful for
+// laying out an embedded equation before calling [DrawInto].
+func Size(dl layout.DisplayList, opts Options) (w, h float64) {
+	w = dl.Width*opts.FontSize + 2*opts.Padding
+	h = (dl.Height+dl.Depth)*opts.FontSize + 2*opts.Padding
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	return w, h
+}
+
 // Render generates a single-page PDF from the DisplayList and returns
 // the raw bytes. The page size matches the math's bounding box +
-// Padding, so the output can be cropped or directly embedded.
+// Padding.
 func Render(dl layout.DisplayList, opts Options) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := RenderTo(&buf, dl, opts); err != nil {
@@ -52,41 +86,18 @@ func Render(dl layout.DisplayList, opts Options) ([]byte, error) {
 
 // RenderTo writes the PDF to w.
 func RenderTo(w io.Writer, dl layout.DisplayList, opts Options) error {
-	wPt := dl.Width*opts.FontSize + 2*opts.Padding
-	hPt := (dl.Height+dl.Depth)*opts.FontSize + 2*opts.Padding
-	if wPt < 1 {
-		wPt = 1
-	}
-	if hPt < 1 {
-		hPt = 1
-	}
+	wPt, hPt := Size(dl, opts)
 	pdf := fpdf.NewCustom(&fpdf.InitType{
 		OrientationStr: "P",
 		UnitStr:        "pt",
 		Size:           fpdf.SizeType{Wd: wPt, Ht: hPt},
 	})
-	// No page margins — math sits at (Padding, Padding) flush in the
-	// requested page extent.
 	pdf.SetMargins(0, 0, 0)
 	pdf.SetAutoPageBreak(false, 0)
 	pdf.AddPage()
-	if err := registerFonts(pdf); err != nil {
+	if err := DrawInto(pdf, dl, 0, 0, opts); err != nil {
 		return err
 	}
-
-	for _, item := range dl.Items {
-		switch v := item.(type) {
-		case layout.GlyphPath:
-			drawGlyph(pdf, v, opts)
-		case layout.Rect:
-			drawRect(pdf, v, opts)
-		case layout.Line:
-			drawLine(pdf, v, opts)
-		case layout.PathItem:
-			drawPath(pdf, v, opts)
-		}
-	}
-
 	if err := pdf.Output(w); err != nil {
 		return fmt.Errorf("pdf: output: %w", err)
 	}
@@ -96,9 +107,68 @@ func RenderTo(w io.Writer, dl layout.DisplayList, opts Options) error {
 	return nil
 }
 
-// registeredFonts tracks which TTFs have been loaded into the
-// supplied Fpdf instance. fpdf's font registry is per-document, so we
-// re-register on each call but only reload bytes from tex/fonts once.
+// DrawInto renders the DisplayList onto pdf with its top-left corner
+// (after Padding) at page position (x, y) on the document's current
+// page. The caller is responsible for constructing the document,
+// adding pages, and setting margins. The math's outer extent is
+// Size(dl, opts).
+//
+// On first use with a given *fpdf.Fpdf, the KaTeX TTFs are registered
+// into that document's font table; subsequent calls on the same pdf
+// reuse them. Call [RegisterFonts] explicitly if you want to control
+// the timing.
+func DrawInto(pdf *fpdf.Fpdf, dl layout.DisplayList, x, y float64, opts Options) error {
+	if err := RegisterFonts(pdf); err != nil {
+		return err
+	}
+	for _, item := range dl.Items {
+		switch v := item.(type) {
+		case layout.GlyphPath:
+			drawGlyph(pdf, v, x, y, opts)
+		case layout.Rect:
+			drawRect(pdf, v)
+		case layout.Line:
+			drawLine(pdf, v, x, y, opts)
+		case layout.PathItem:
+			drawPath(pdf, v, x, y, opts)
+		}
+	}
+	return pdf.Error()
+}
+
+// RegisterFonts registers the KaTeX TTFs into pdf's font table. Safe
+// to call multiple times: subsequent calls on the same pdf are no-ops.
+func RegisterFonts(pdf *fpdf.Fpdf) error {
+	if pdf == nil {
+		return fmt.Errorf("pdf: nil *fpdf.Fpdf")
+	}
+	if _, done := registeredPDFs.LoadOrStore(pdf, true); done {
+		return nil
+	}
+	for _, name := range fonts.Names() {
+		b, err := ttfBytes(name)
+		if err != nil {
+			registeredPDFs.Delete(pdf)
+			return err
+		}
+		// All fonts loaded as the "regular" style; bold / italic /
+		// bold-italic variants are separate font IDs in the layout
+		// package (e.g. "Main-Bold", "Math-BoldItalic"), so we don't
+		// rely on fpdf's style flags.
+		pdf.AddUTF8FontFromBytes(name, "", b)
+	}
+	if err := pdf.Error(); err != nil {
+		registeredPDFs.Delete(pdf)
+		return err
+	}
+	return nil
+}
+
+// registeredPDFs tracks which fpdf documents have already had the
+// KaTeX font set installed. Keyed by *fpdf.Fpdf so multiple unrelated
+// documents in the same process each register independently.
+var registeredPDFs sync.Map
+
 var (
 	ttfCacheMu sync.Mutex
 	ttfCache   = map[string][]byte{}
@@ -118,36 +188,21 @@ func ttfBytes(fontID string) ([]byte, error) {
 	return b, nil
 }
 
-func registerFonts(pdf *fpdf.Fpdf) error {
-	for _, name := range fonts.Names() {
-		b, err := ttfBytes(name)
-		if err != nil {
-			return err
-		}
-		// All fonts loaded as the "regular" style; bold / italic /
-		// bold-italic variants are separate font IDs in the layout
-		// package (e.g. "Main-Bold", "Math-BoldItalic"), so we don't
-		// rely on fpdf's style flags.
-		pdf.AddUTF8FontFromBytes(name, "", b)
-	}
-	return pdf.Error()
-}
-
-func drawGlyph(pdf *fpdf.Fpdf, g layout.GlyphPath, opts Options) {
+func drawGlyph(pdf *fpdf.Fpdf, g layout.GlyphPath, ox, oy float64, opts Options) {
 	if _, err := ttfBytes(g.Font); err != nil {
 		// Unknown font (e.g. CJK-Regular) — skip silently rather than
 		// failing the entire render.
 		return
 	}
 	em := opts.FontSize * g.Scale
-	x := g.X*opts.FontSize + opts.Padding
-	y := g.Y*opts.FontSize + opts.Padding
+	x := ox + g.X*opts.FontSize + opts.Padding
+	y := oy + g.Y*opts.FontSize + opts.Padding
 	pdf.SetFont(g.Font, "", em)
 	pdf.SetTextColor(int(g.Color.R), int(g.Color.G), int(g.Color.B))
 	pdf.Text(x, y, string(g.CharCode))
 }
 
-func drawRect(pdf *fpdf.Fpdf, r layout.Rect, opts Options) {
+func drawRect(pdf *fpdf.Fpdf, r layout.Rect) {
 	if r.Width <= 0 || r.Height <= 0 {
 		return
 	}
@@ -155,15 +210,15 @@ func drawRect(pdf *fpdf.Fpdf, r layout.Rect, opts Options) {
 	pdf.Rect(r.X, r.Y, r.Width, r.Height, "F")
 }
 
-func drawLine(pdf *fpdf.Fpdf, l layout.Line, opts Options) {
+func drawLine(pdf *fpdf.Fpdf, l layout.Line, ox, oy float64, opts Options) {
 	em := opts.FontSize
 	t := l.Thickness * em
 	if t < 1e-6 {
 		t = 1e-6
 	}
 	w := l.Width * em
-	x0 := l.X*em + opts.Padding
-	yc := l.Y*em + opts.Padding
+	x0 := ox + l.X*em + opts.Padding
+	yc := oy + l.Y*em + opts.Padding
 	if l.Dashed {
 		pdf.SetDrawColor(int(l.Color.R), int(l.Color.G), int(l.Color.B))
 		pdf.SetLineWidth(t)
@@ -178,10 +233,10 @@ func drawLine(pdf *fpdf.Fpdf, l layout.Line, opts Options) {
 	pdf.Rect(x0, y0, w, t, "F")
 }
 
-func drawPath(pdf *fpdf.Fpdf, p layout.PathItem, opts Options) {
+func drawPath(pdf *fpdf.Fpdf, p layout.PathItem, ox, oy float64, opts Options) {
 	em := opts.FontSize
-	x0 := p.X*em + opts.Padding
-	y0 := p.Y*em + opts.Padding
+	x0 := ox + p.X*em + opts.Padding
+	y0 := oy + p.Y*em + opts.Padding
 	first := true
 	for _, c := range p.Commands {
 		ax := x0 + c.X*em
