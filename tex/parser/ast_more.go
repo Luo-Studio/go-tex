@@ -441,6 +441,77 @@ func (i *Internal) MarshalJSON() ([]byte, error) {
 	return withType("internal", (*alias)(i))
 }
 
+// AlignType discriminates AlignSpec rows: an actual column align or a
+// column separator.
+type AlignType string
+
+const (
+	AlignTypeAlign     AlignType = "align"
+	AlignTypeSeparator AlignType = "separator"
+)
+
+// AlignSpec describes one column of an array.
+type AlignSpec struct {
+	Type    AlignType `json:"type"`
+	Align   *string   `json:"align,omitempty"`
+	Pregap  *float64  `json:"pregap,omitempty"`
+	Postgap *float64  `json:"postgap,omitempty"`
+}
+
+// Array is the AST node for `\begin{matrix}...\end{matrix}` and friends.
+//
+// The shape mirrors upstream:
+//
+//	body              [][]Node — rows of cells
+//	rowGaps           []*Measurement — len = rows-1, may be nil entries
+//	hLinesBeforeRow   [][]bool — len = rows+1, each entry lists hlines
+//	cols              optional — column align specs
+//	colSeparationType optional — "align"/"alignat"/"small"/"CD"
+//	... (see upstream parse_node.rs Array variant)
+type Array struct {
+	Mode              Mode             `json:"mode"`
+	Body              [][]Node         `json:"body"`
+	RowGaps           []*Measurement   `json:"rowGaps"`
+	HLinesBeforeRow   [][]bool         `json:"hLinesBeforeRow"`
+	Cols              []AlignSpec      `json:"cols,omitempty"`
+	ColSeparationType *string          `json:"colSeparationType,omitempty"`
+	HskipBeforeAndAft *bool            `json:"hskipBeforeAndAfter,omitempty"`
+	AddJot            *bool            `json:"addJot,omitempty"`
+	ArrayStretch      float64          `json:"arraystretch"`
+	Tags              []ArrayTag       `json:"tags,omitempty"`
+	Leqno             *bool            `json:"leqno,omitempty"`
+	IsCD              *bool            `json:"isCD,omitempty"`
+	Loc               Loc              `json:"loc,omitempty"`
+}
+
+// ArrayTag is either an auto-numbering bool or an explicit tag body.
+type ArrayTag struct {
+	Auto     *bool   // present for auto-numbering rows
+	Explicit []Node  // present for `\tag{...}` rows
+}
+
+// MarshalJSON renders ArrayTag as either a bool or a node list, matching
+// upstream's `#[serde(untagged)]` enum.
+func (t ArrayTag) MarshalJSON() ([]byte, error) {
+	if t.Auto != nil {
+		if *t.Auto {
+			return []byte("true"), nil
+		}
+		return []byte("false"), nil
+	}
+	if t.Explicit == nil {
+		return []byte("[]"), nil
+	}
+	return jsonRawMarshal(t.Explicit)
+}
+
+func (a *Array) NodeType() string { return "array" }
+func (a *Array) NodeMode() Mode   { return a.Mode }
+func (a *Array) MarshalJSON() ([]byte, error) {
+	type alias Array
+	return withType("array", (*alias)(a))
+}
+
 // HorizBrace is `\overbrace{...}` / `\underbrace{...}`.
 type HorizBrace struct {
 	Mode   Mode   `json:"mode"`

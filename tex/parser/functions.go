@@ -12,6 +12,8 @@ import (
 func functionDispatch(p *Parser, callerName, breakOnText string) (Node, error) {
 	cmd := p.cur.Text
 	switch cmd {
+	case `\begin`:
+		return parseEnvironment(p)
 	case `\frac`, `\dfrac`, `\tfrac`, `\cfrac`:
 		return parseFrac(p)
 	case `\binom`, `\dbinom`, `\tbinom`:

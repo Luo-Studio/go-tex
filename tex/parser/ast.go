@@ -144,6 +144,12 @@ func jsonString(s string) string {
 	return string(b)
 }
 
+// jsonRawMarshal marshals v with the standard library encoder. Exposed here
+// so other AST types (e.g. ArrayTag) can call into it without re-importing.
+func jsonRawMarshal(v any) ([]byte, error) {
+	return json.Marshal(v)
+}
+
 // Loc is a pointer alias for source.Location so we can omit absent locations.
 type Loc = *source.Location
 

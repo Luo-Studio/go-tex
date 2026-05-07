@@ -47,6 +47,7 @@ func scoreFile(t *testing.T, r *os.File, upstream string) (match, count int, exa
 	s := bufio.NewScanner(r)
 	s.Buffer(make([]byte, 1<<16), 1<<20)
 	byteMatch := 0
+	canonMatch := 0
 	for s.Scan() {
 		expr := strings.TrimSpace(s.Text())
 		if expr == "" {
@@ -58,6 +59,12 @@ func scoreFile(t *testing.T, r *os.File, upstream string) (match, count int, exa
 		if goOut == rustOut {
 			byteMatch++
 		}
+		// Canonical: round-trip both through encoding/json so trivial
+		// formatting (whole-number floats, key ordering, whitespace) is
+		// normalised away. This is the headline parity score.
+		if normaliseJSON(goOut) == normaliseJSON(rustOut) {
+			canonMatch++
+		}
 		if jsonsEqual(goOut, rustOut) {
 			match++
 		}
@@ -65,8 +72,24 @@ func scoreFile(t *testing.T, r *os.File, upstream string) (match, count int, exa
 	if err := s.Err(); err != nil {
 		t.Fatalf("scan: %v", err)
 	}
-	t.Logf("    (byte-identical: %d/%d, %.2f%%)", byteMatch, count, percent(byteMatch, count))
+	t.Logf("    canonical:        %d/%d (%.2f%%)", canonMatch, count, percent(canonMatch, count))
+	t.Logf("    byte-identical:   %d/%d (%.2f%%)", byteMatch, count, percent(byteMatch, count))
 	return match, count, examples
+}
+
+// normaliseJSON unmarshals and re-marshals s with encoding/json so the
+// output is canonical: keys sorted, whole-number floats represented
+// consistently, whitespace stripped.
+func normaliseJSON(s string) string {
+	var v any
+	if err := json.Unmarshal([]byte(s), &v); err != nil {
+		return s
+	}
+	out, err := json.Marshal(v)
+	if err != nil {
+		return s
+	}
+	return string(out)
 }
 
 // goParseLine runs the in-process equivalent of cmd/parse for a single line.
