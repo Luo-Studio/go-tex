@@ -67,10 +67,7 @@ func layoutNode(n parser.Node, opts Options) *Box {
 	case *parser.AccentToken:
 		return layoutSymbol(v.Text, v.Mode, opts)
 	case *parser.Spacing:
-		// Spacing nodes have no metric width of their own at the layout
-		// level; their glue contribution comes from the surrounding atom
-		// spacing rules. Emit an empty box for now.
-		return NewEmpty()
+		return layoutSpacingNode(v.Text, opts)
 	case *parser.GenFrac:
 		barThickness := opts.Metrics().DefaultRuleThickness
 		if !v.HasBarLine {

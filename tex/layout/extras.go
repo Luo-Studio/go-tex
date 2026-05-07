@@ -38,6 +38,37 @@ func layoutTextBody(nodes []parser.Node, opts Options) *Box {
 	return makeHBox(children, opts.Color)
 }
 
+// layoutSpacingNode emits a kern-width box for a fixed-size spacing node
+// (\\quad, \\nobreakspace, \\ ). Widths from KaTeX fixed-spacing rules.
+func layoutSpacingNode(text string, opts Options) *Box {
+	q := opts.Metrics().Quad
+	switch text {
+	case `\quad`:
+		return NewKern(1.0 * q)
+	case `\qquad`:
+		return NewKern(2.0 * q)
+	case `\enspace`:
+		return NewKern(0.5 * q)
+	case `\thinspace`:
+		return NewKern(3.0 / 18.0 * q)
+	case `\medspace`:
+		return NewKern(4.0 / 18.0 * q)
+	case `\thickspace`:
+		return NewKern(5.0 / 18.0 * q)
+	case `\negthinspace`:
+		return NewKern(-3.0 / 18.0 * q)
+	case `\negmedspace`:
+		return NewKern(-4.0 / 18.0 * q)
+	case `\negthickspace`:
+		return NewKern(-5.0 / 18.0 * q)
+	case `\nobreakspace`, " ":
+		return NewKern(0.25)
+	case `\ `, `\\ `:
+		return NewKern(0.25)
+	}
+	return NewEmpty()
+}
+
 // measurementToEm converts a parser.Measurement to em given the current
 // style. Approximate; accurate enough for layout-dim parity.
 func measurementToEm(m parser.Measurement, opts Options) float64 {
@@ -64,18 +95,35 @@ func measurementToEm(m parser.Measurement, opts Options) float64 {
 	return m.Number
 }
 
-// layoutOp implements the simplest Op layout: emit the operator glyph
-// (e.g. \int, \sum). Limits handling needs sup/sub from the parent
-// SupSub, which we don't model here.
+// layoutOp lays out an Op (\sum, \int, \lim, \sin, …). Symbol ops emit
+// the named glyph from Main-Regular (or Size1 for big ops); text ops
+// (\lim, \sin, …) emit the function name in upright Main-Regular.
 func layoutOp(op *parser.Op, opts Options) *Box {
 	if op.Body != nil && len(op.Body) > 0 {
-		// `\mathop{...}` — body is the content.
 		return layoutExpression(op.Body, opts, true)
 	}
-	if op.Name != nil {
-		return layoutSymbol(*op.Name, parser.ModeMath, opts)
+	if op.Name == nil {
+		return NewEmpty()
 	}
-	return NewEmpty()
+	name := *op.Name
+	if op.Symbol {
+		return layoutSymbol(name, parser.ModeMath, opts)
+	}
+	// Text op: lay out the function name (drop the leading '\') as a
+	// row of upright Main-Regular glyphs.
+	if len(name) > 0 && name[0] == '\\' {
+		name = name[1:]
+	}
+	children := make([]*Box, 0, len(name))
+	for _, r := range name {
+		if cm, ok := fontmetrics.LookupWithFallback(fontmetrics.FontMainRegular, r); ok {
+			children = append(children, &Box{
+				Width: cm.Width, Height: cm.Height, Depth: cm.Depth, Color: opts.Color,
+				Content: Glyph{FontID: fontmetrics.FontMainRegular, CharCode: r},
+			})
+		}
+	}
+	return makeHBox(children, opts.Color)
 }
 
 func layoutOperatorName(op *parser.OperatorName, opts Options) *Box {
