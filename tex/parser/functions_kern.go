@@ -45,9 +45,10 @@ func parseHSpace(p *Parser) (Node, error) {
 // (\quad, \qquad, etc.) plus a few control-sequence names that the upstream
 // passes through as SpacingNode (\space, \nobreakspace).
 func parseSpacingNode(p *Parser) (Node, error) {
-	cmd := p.cur.Text
+	tok := p.cur
 	p.advance()
-	return &Spacing{Mode: p.mode, Text: cmd}, nil
+	loc := tok.Loc
+	return &Spacing{Mode: p.mode, Text: tok.Text, Loc: &loc}, nil
 }
 
 // parseSizeGroup reads a size argument in either of two forms:

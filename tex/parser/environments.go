@@ -134,12 +134,26 @@ func handleAlignedEnv(p *Parser, name string) (Node, error) {
 	}
 
 	if isEquation {
+		var tags []ArrayTag
+		if !strings.HasSuffix(name, "*") {
+			tags = make([]ArrayTag, len(rows))
+			for i := range tags {
+				p.equationCounter++
+				num := fmt.Sprintf("%d", p.equationCounter)
+				tags[i] = ArrayTag{Explicit: []Node{
+					&MathOrd{Mode: ModeMath, Text: "("},
+					&MathOrd{Mode: ModeMath, Text: num},
+					&MathOrd{Mode: ModeMath, Text: ")"},
+				}}
+			}
+		}
 		return &Array{
 			Mode:            p.mode,
 			Body:            rows,
 			RowGaps:         rowGaps,
 			HLinesBeforeRow: hlines,
 			ArrayStretch:    1.0,
+			Tags:            tags,
 		}, nil
 	}
 	if isGather {

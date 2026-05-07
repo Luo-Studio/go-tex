@@ -67,6 +67,11 @@ type Parser struct {
 	gullet *macroexp.Expander
 	cur    lexer.Token
 	mode   Mode
+
+	// equationCounter is incremented for each auto-numbered equation row
+	// (\begin{equation}, \begin{align}, etc.) so the resulting Tag carries
+	// the right "(N)" body. Mirrors upstream Parser.equation_counter.
+	equationCounter int
 }
 
 func newParser(input string) *Parser {
