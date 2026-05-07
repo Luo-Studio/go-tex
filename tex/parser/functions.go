@@ -79,6 +79,44 @@ func functionDispatch(p *Parser, callerName, breakOnText string) (Node, error) {
 	if isInfixCmd(cmd) {
 		return parseInfix(p)
 	}
+	if isTextAccent(cmd) {
+		return parseTextAccent(p)
+	}
+	if isXArrow(cmd) {
+		return parseXArrow(p)
+	}
+	switch cmd {
+	case `\fbox`, `\cancel`, `\bcancel`, `\xcancel`, `\sout`, `\phase`, `\angl`,
+		`\colorbox`, `\fcolorbox`:
+		return parseEnclose(p)
+	case `\mathllap`, `\mathrlap`, `\mathclap`:
+		return parseLap(p)
+	case `\rule`:
+		return parseRule(p)
+	case `\raisebox`:
+		return parseRaiseBox(p)
+	case `\mathchoice`:
+		return parseMathChoice(p)
+	case `\href`, `\url`:
+		return parseHref(p)
+	case `\smash`:
+		return parseSmash(p)
+	case `\mathord`, `\mathbin`, `\mathrel`, `\mathopen`, `\mathclose`,
+		`\mathpunct`, `\mathinner`:
+		return parseMClassWrap(p)
+	case `\stackrel`, `\overset`, `\underset`:
+		return parseStackrel(p)
+	case `\overbracket`, `\underbracket`:
+		return parseHorizBracket(p)
+	case `\nonumber`, `\notag`:
+		return parseNoNumber(p)
+	case `\pmb`:
+		return parsePmb(p)
+	case `\vcenter`:
+		return parseVCenter(p)
+	case `\hbox`:
+		return parseHBox(p)
+	}
 	if cmd == `\overbrace` || cmd == `\underbrace` {
 		return parseHorizBrace(p)
 	}

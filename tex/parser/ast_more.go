@@ -512,7 +512,8 @@ func (a *Array) MarshalJSON() ([]byte, error) {
 	return withType("array", (*alias)(a))
 }
 
-// HorizBrace is `\overbrace{...}` / `\underbrace{...}`.
+// HorizBrace is `\overbrace{...}` / `\underbrace{...}` /
+// `\overbracket{...}` / `\underbracket{...}`.
 type HorizBrace struct {
 	Mode   Mode   `json:"mode"`
 	Label  string `json:"label"`
@@ -526,6 +527,189 @@ func (h *HorizBrace) NodeMode() Mode   { return h.Mode }
 func (h *HorizBrace) MarshalJSON() ([]byte, error) {
 	type alias HorizBrace
 	return withType("horizBrace", (*alias)(h))
+}
+
+// Enclose is `\fbox{...}`, `\cancel{...}`, `\bcancel{...}`, `\xcancel{...}`,
+// `\sout{...}`, `\phase{...}`, `\angl{...}`, `\colorbox{...}{...}`,
+// `\fcolorbox{...}{...}{...}`.
+type Enclose struct {
+	Mode            Mode    `json:"mode"`
+	Label           string  `json:"label"`
+	BackgroundColor *string `json:"backgroundColor,omitempty"`
+	BorderColor     *string `json:"borderColor,omitempty"`
+	Body            Node    `json:"body"`
+	Loc             Loc     `json:"loc,omitempty"`
+}
+
+func (e *Enclose) NodeType() string { return "enclose" }
+func (e *Enclose) NodeMode() Mode   { return e.Mode }
+func (e *Enclose) MarshalJSON() ([]byte, error) {
+	type alias Enclose
+	return withType("enclose", (*alias)(e))
+}
+
+// Lap is `\mathllap`, `\mathrlap`, `\mathclap`.
+type Lap struct {
+	Mode      Mode   `json:"mode"`
+	Alignment string `json:"alignment"`
+	Body      Node   `json:"body"`
+	Loc       Loc    `json:"loc,omitempty"`
+}
+
+func (l *Lap) NodeType() string { return "lap" }
+func (l *Lap) NodeMode() Mode   { return l.Mode }
+func (l *Lap) MarshalJSON() ([]byte, error) {
+	type alias Lap
+	return withType("lap", (*alias)(l))
+}
+
+// RaiseBox is `\raisebox{dy}{body}`.
+type RaiseBox struct {
+	Mode Mode        `json:"mode"`
+	Dy   Measurement `json:"dy"`
+	Body Node        `json:"body"`
+	Loc  Loc         `json:"loc,omitempty"`
+}
+
+func (r *RaiseBox) NodeType() string { return "raisebox" }
+func (r *RaiseBox) NodeMode() Mode   { return r.Mode }
+func (r *RaiseBox) MarshalJSON() ([]byte, error) {
+	type alias RaiseBox
+	return withType("raisebox", (*alias)(r))
+}
+
+// VCenter is `\vcenter{...}`.
+type VCenter struct {
+	Mode Mode `json:"mode"`
+	Body Node `json:"body"`
+	Loc  Loc  `json:"loc,omitempty"`
+}
+
+func (v *VCenter) NodeType() string { return "vcenter" }
+func (v *VCenter) NodeMode() Mode   { return v.Mode }
+func (v *VCenter) MarshalJSON() ([]byte, error) {
+	type alias VCenter
+	return withType("vcenter", (*alias)(v))
+}
+
+// MathChoice is `\mathchoice{display}{text}{script}{scriptscript}`.
+type MathChoice struct {
+	Mode         Mode   `json:"mode"`
+	Display      []Node `json:"display"`
+	Text         []Node `json:"text"`
+	Script       []Node `json:"script"`
+	ScriptScript []Node `json:"scriptscript"`
+	Loc          Loc    `json:"loc,omitempty"`
+}
+
+func (m *MathChoice) NodeType() string { return "mathchoice" }
+func (m *MathChoice) NodeMode() Mode   { return m.Mode }
+func (m *MathChoice) MarshalJSON() ([]byte, error) {
+	type alias MathChoice
+	return withType("mathchoice", (*alias)(m))
+}
+
+// Href is `\href{url}{body}`.
+type Href struct {
+	Mode Mode   `json:"mode"`
+	Href string `json:"href"`
+	Body []Node `json:"body"`
+	Loc  Loc    `json:"loc,omitempty"`
+}
+
+func (h *Href) NodeType() string { return "href" }
+func (h *Href) NodeMode() Mode   { return h.Mode }
+func (h *Href) MarshalJSON() ([]byte, error) {
+	type alias Href
+	return withType("href", (*alias)(h))
+}
+
+// URL is `\url{addr}` (kept here for completeness; the parser usually emits
+// Href with the URL rendered as a typewriter Text).
+type URL struct {
+	Mode Mode   `json:"mode"`
+	URL  string `json:"url"`
+	Loc  Loc    `json:"loc,omitempty"`
+}
+
+func (u *URL) NodeType() string { return "url" }
+func (u *URL) NodeMode() Mode   { return u.Mode }
+func (u *URL) MarshalJSON() ([]byte, error) {
+	type alias URL
+	return withType("url", (*alias)(u))
+}
+
+// XArrow is `\xrightarrow[below]{body}` and the wider extensible-arrow family.
+type XArrow struct {
+	Mode  Mode   `json:"mode"`
+	Label string `json:"label"`
+	Body  Node   `json:"body"`
+	Below Node   `json:"below,omitempty"`
+	Loc   Loc    `json:"loc,omitempty"`
+}
+
+func (x *XArrow) NodeType() string { return "xArrow" }
+func (x *XArrow) NodeMode() Mode   { return x.Mode }
+func (x *XArrow) MarshalJSON() ([]byte, error) {
+	type alias XArrow
+	return withType("xArrow", (*alias)(x))
+}
+
+// HBox is `\hbox{...}`.
+type HBox struct {
+	Mode Mode   `json:"mode"`
+	Body []Node `json:"body"`
+	Loc  Loc    `json:"loc,omitempty"`
+}
+
+func (h *HBox) NodeType() string { return "hbox" }
+func (h *HBox) NodeMode() Mode   { return h.Mode }
+func (h *HBox) MarshalJSON() ([]byte, error) {
+	type alias HBox
+	return withType("hbox", (*alias)(h))
+}
+
+// Tag is the `\tag{...}` body for an array row.
+type Tag struct {
+	Mode Mode   `json:"mode"`
+	Body []Node `json:"body"`
+	Tag  []Node `json:"tag"`
+	Loc  Loc    `json:"loc,omitempty"`
+}
+
+func (t *Tag) NodeType() string { return "tag" }
+func (t *Tag) NodeMode() Mode   { return t.Mode }
+func (t *Tag) MarshalJSON() ([]byte, error) {
+	type alias Tag
+	return withType("tag", (*alias)(t))
+}
+
+// NoNumber is `\nonumber` / `\notag`.
+type NoNumber struct {
+	Mode Mode `json:"mode"`
+	Loc  Loc  `json:"loc,omitempty"`
+}
+
+func (n *NoNumber) NodeType() string { return "nonumber" }
+func (n *NoNumber) NodeMode() Mode   { return n.Mode }
+func (n *NoNumber) MarshalJSON() ([]byte, error) {
+	type alias NoNumber
+	return withType("nonumber", (*alias)(n))
+}
+
+// Pmb is `\pmb{...}` (poor man's bold).
+type Pmb struct {
+	Mode   Mode   `json:"mode"`
+	Mclass string `json:"mclass"`
+	Body   []Node `json:"body"`
+	Loc    Loc    `json:"loc,omitempty"`
+}
+
+func (p *Pmb) NodeType() string { return "pmb" }
+func (p *Pmb) NodeMode() Mode   { return p.Mode }
+func (p *Pmb) MarshalJSON() ([]byte, error) {
+	type alias Pmb
+	return withType("pmb", (*alias)(p))
 }
 
 // Verb is `\verb|...|`.
