@@ -184,10 +184,14 @@ func (p *Parser) parseAtom(breakOnText string) (Node, error) {
 		t := p.cur
 		switch {
 		case t.Text == `\limits` || t.Text == `\nolimits`:
-			// \limits / \nolimits attach to operator nodes (Op / OperatorName).
-			// Without an op base the upstream silently consumes the directive.
+			isLimits := t.Text == `\limits`
 			p.advance()
-			// TODO: when Op/OperatorName are produced, mutate base.limits.
+			switch v := base.(type) {
+			case *Op:
+				v.Limits = isLimits
+			case *OperatorName:
+				v.Limits = isLimits
+			}
 		case t.Text == "^":
 			if sup != nil {
 				return nil, errAt("Double superscript", t)
