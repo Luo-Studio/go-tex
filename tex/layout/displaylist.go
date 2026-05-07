@@ -291,8 +291,17 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 			Color:    b.Color,
 		})
 	case Rule:
+		// Rule's baseline is at y + b.Height*scale. Raise = distance
+		// from baseline to bottom edge of the rule. Line CENTER is then
+		// at baseline - (raise + thickness/2) * scale. Mirrors upstream
+		// emit_box's Rule branch.
+		baselineY := y + b.Height*scale
+		lineCenterY := baselineY - (c.Raise+c.Thickness/2)*scale
+		// Line draws from yc - t/2 to yc + t/2; we use Rect for parity
+		// with upstream which emits a filled rect for solid rules.
+		topY := lineCenterY - c.Thickness*scale/2
 		dl.Items = append(dl.Items, Rect{
-			X: x, Y: y, Width: b.Width * scale, Height: c.Thickness * scale, Color: b.Color,
+			X: x, Y: topY, Width: b.Width * scale, Height: c.Thickness * scale, Color: b.Color,
 		})
 	case HBox:
 		cx := x

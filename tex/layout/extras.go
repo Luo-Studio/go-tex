@@ -624,6 +624,53 @@ func makeStretchyDelim(delim string, totalH float64, opts Options) *Box {
 	}
 }
 
+// layoutImageofOrigof builds the synthetic •—○ / ○—• symbol for
+// \imageof (U+22B7) and \origof (U+22B6). Mirrors upstream
+// layout_imageof_origof.
+func layoutImageofOrigof(imageof bool, opts Options) *Box {
+	const r = 0.1125
+	const cy = -0.2625
+	const k = 0.5523
+	const cx = r
+	h := r + (-cy)
+	d := 0.0
+	const strokeHalf = 0.01875
+	const rRing = r - strokeHalf
+	circle := func(ox, rad float64) []path.Command {
+		return []path.Command{
+			path.MoveTo(ox+rad, cy),
+			path.CubicTo(ox+rad, cy-k*rad, ox+k*rad, cy-rad, ox, cy-rad),
+			path.CubicTo(ox-k*rad, cy-rad, ox-rad, cy-k*rad, ox-rad, cy),
+			path.CubicTo(ox-rad, cy+k*rad, ox-k*rad, cy+rad, ox, cy+rad),
+			path.CubicTo(ox+k*rad, cy+rad, ox+rad, cy+k*rad, ox+rad, cy),
+			{Kind: path.KindClose},
+		}
+	}
+	disk := &Box{
+		Width: 2 * r, Height: h, Depth: d, Color: opts.Color,
+		Content: SvgPath{Commands: circle(cx, r), Fill: true},
+	}
+	ring := &Box{
+		Width: 2 * r, Height: h, Depth: d, Color: opts.Color,
+		Content: SvgPath{Commands: circle(cx, rRing), Fill: false},
+	}
+	const barLen = 0.25
+	const barTh = 0.04
+	barRaise := -cy - barTh/2
+	bar := NewRule(barLen, h, d, barTh, barRaise)
+	var children []*Box
+	if imageof {
+		children = []*Box{disk, bar, ring}
+	} else {
+		children = []*Box{ring, bar, disk}
+	}
+	totalW := 4*r + barLen
+	return &Box{
+		Width: totalW, Height: h, Depth: d, Color: opts.Color,
+		Content: HBox{Children: children},
+	}
+}
+
 // layoutTextcircled draws a circle around the body. Mirrors upstream
 // layout_textcircled. Used by \copyright (= \textcircled{c} via macro).
 func layoutTextcircled(body *Box, opts Options) *Box {

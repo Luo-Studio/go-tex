@@ -472,6 +472,14 @@ func layoutNode(n parser.Node, opts Options) *Box {
 // upstream font-selection rules + the real font-metrics tables.
 func layoutSymbol(text string, mode parser.Mode, opts Options) *Box {
 	ch, _ := decodeFirstRune(text)
+	// Synthetic SVG-path symbols not present in any KaTeX font.
+	resolvedSym := resolveCodepoint(text, ch, mode)
+	switch resolvedSym {
+	case 0x22B7:
+		return layoutImageofOrigof(true, opts) // \imageof
+	case 0x22B6:
+		return layoutImageofOrigof(false, opts) // \origof
+	}
 	// Math alphanumeric symbols (U+1D400-U+1D7FF): font is determined
 	// by the ORIGINAL codepoint's block; metrics are looked up at the
 	// ASCII letter/digit slot. Display char remains the original Unicode.
