@@ -504,6 +504,30 @@ func parseHBox(p *Parser) (Node, error) {
 // \html@mathml{html}{mathml}
 // =============================================================================
 
+// parseMathSwitch handles `\(` and `$` (math-mode entry inside text mode).
+// Body is parsed in math mode then wrapped in Styling[text]. Closing
+// delimiter is `\)` for `\(` or `$` for `$`.
+func parseMathSwitch(p *Parser, cmd string) (Node, error) {
+	p.advance()
+	close := `\)`
+	if cmd == "$" {
+		close = "$"
+	}
+	prev := p.mode
+	p.switchMode(ModeMath)
+	body, err := p.parseExpression(false, close)
+	if err != nil {
+		p.switchMode(prev)
+		return nil, err
+	}
+	if err := p.expect(close); err != nil {
+		p.switchMode(prev)
+		return nil, err
+	}
+	p.switchMode(prev)
+	return &Styling{Mode: p.mode, Style: StyleText, Body: body}, nil
+}
+
 // parseAtChar handles `\@char{N}` — converts the integer N to the
 // matching Unicode codepoint and emits a TextOrd node, mirroring upstream.
 func parseAtChar(p *Parser) (Node, error) {

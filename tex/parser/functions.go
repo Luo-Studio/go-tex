@@ -130,6 +130,10 @@ func functionDispatch(p *Parser, callerName, breakOnText string) (Node, error) {
 		return parseAtChar(p)
 	case `\newline`, `\\`:
 		return parseCr(p)
+	case `\(`, "$":
+		return parseMathSwitch(p, cmd)
+	case `\)`, `\]`:
+		return nil, errAt("Mismatched "+cmd, p.cur)
 	case `\relax`:
 		return &Internal{Mode: p.mode}, p.advanceAndReturn()
 	case `\hspace`, `\hfill`:

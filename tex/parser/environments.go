@@ -208,6 +208,21 @@ func handleAlignedEnv(p *Parser, name string) (Node, error) {
 	if isAlignat {
 		sepType = "alignat"
 	}
+	// Auto-numbering: align/alignat (without *) and not split/aligned/alignedat.
+	autoNum := !strings.HasSuffix(name, "*") && base != "split" && base != "aligned" && base != "alignedat"
+	var tags []ArrayTag
+	if autoNum {
+		tags = make([]ArrayTag, len(rows))
+		for i := range tags {
+			p.equationCounter++
+			num := fmt.Sprintf("%d", p.equationCounter)
+			tags[i] = ArrayTag{Explicit: []Node{
+				&MathOrd{Mode: ModeMath, Text: "("},
+				&MathOrd{Mode: ModeMath, Text: num},
+				&MathOrd{Mode: ModeMath, Text: ")"},
+			}}
+		}
+	}
 	return &Array{
 		Mode:              p.mode,
 		Body:              rows,
@@ -217,6 +232,7 @@ func handleAlignedEnv(p *Parser, name string) (Node, error) {
 		Cols:              cols,
 		ColSeparationType: &sepType,
 		ArrayStretch:      1.0,
+		Tags:              tags,
 	}, nil
 }
 
