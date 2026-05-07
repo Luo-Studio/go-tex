@@ -532,6 +532,49 @@ func layoutUnderline(o *parser.Underline, opts Options) *Box {
 		Content: Underline{Body: body, RuleThickness: rt}}
 }
 
+// sizingMultipliers maps KaTeX sizing keyword index (1-11) to a font
+// scale ratio. Mirrors upstream layout_sizing.
+var sizingMultipliers = []float64{
+	1.0,   // 0 (unused)
+	0.5,   // \tiny
+	0.6,   // \sixptsize
+	0.7,   // \scriptsize
+	0.8,   // \footnotesize
+	0.9,   // \small
+	1.0,   // \normalsize
+	1.2,   // \large
+	1.44,  // \Large
+	1.728, // \LARGE
+	2.074, // \huge
+	2.488, // \Huge
+}
+
+// layoutSizing handles \tiny, \scriptsize, ..., \Huge — sizing
+// keywords. Builds inner at textstyle and wraps in a Scaled box if the
+// ratio differs from current.
+func layoutSizing(s *parser.Sizing, opts Options) *Box {
+	if int(s.Size) <= 0 || int(s.Size) >= len(sizingMultipliers) {
+		return layoutExpression(s.Body, opts, true)
+	}
+	mult := sizingMultipliers[s.Size]
+	innerOpts := opts.WithStyle(opts.Style.Text())
+	inner := layoutExpression(s.Body, innerOpts, true)
+	ratio := mult / opts.SizeMultiplier()
+	if ratio > 0.999 && ratio < 1.001 {
+		return inner
+	}
+	return &Box{
+		Width:  inner.Width * ratio,
+		Height: inner.Height * ratio,
+		Depth:  inner.Depth * ratio,
+		Color:  opts.Color,
+		Content: Scaled{
+			Body:       inner,
+			ChildScale: ratio,
+		},
+	}
+}
+
 // isSingleCharBody mirrors KaTeX isCharacterBox: single Atom/MathOrd/
 // TextOrd, possibly wrapped in a 1-element OrdGroup or Styling.
 func isSingleCharBody(n parser.Node) bool {

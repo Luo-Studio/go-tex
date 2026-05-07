@@ -220,8 +220,10 @@ func layoutNode(n parser.Node, opts Options) *Box {
 		return makeHBox(children, opts.Color)
 	case *parser.DelimSizing:
 		return layoutDelimSizing(v, opts)
+	case *parser.Sizing:
+		return layoutSizing(v, opts)
 	case *parser.Cr, *parser.Infix, *parser.Middle,
-		*parser.LeftRightRight, *parser.Sizing,
+		*parser.LeftRightRight,
 		*parser.XArrow, *parser.Lap, *parser.VCenter, *parser.Tag,
 		*parser.Pmb, *parser.Href, *parser.URL:
 		// TODO: full layout for these; for now just lay out subtrees we
