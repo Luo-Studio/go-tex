@@ -83,12 +83,88 @@ func layoutOperatorName(op *parser.OperatorName, opts Options) *Box {
 	return layoutTextBody(op.Body, textOpts)
 }
 
-// layoutAccent is a placeholder that returns the base unchanged. Real
-// accent layout needs glyph widths for the accent character; we'll
-// refine once that data is wired up.
+// accentChar maps an accent label to the glyph codepoint upstream's
+// symbols table records for it. (These differ from the Unicode "modifier
+// letter" forms — KaTeX uses the ASCII caret `^` for `\hat`, etc.)
+var accentChar = map[string]rune{
+	`\hat`:       '^',
+	`\widehat`:   '^',
+	`\check`:     0x02C7, // ˇ
+	`\widecheck`: 0x02C7,
+	`\tilde`:     '~',
+	`\widetilde`: '~',
+	`\acute`:     0x02CA, // ˊ
+	`\grave`:     '`',
+	`\dot`:       0x02D9,
+	`\ddot`:      0x00A8,
+	`\bar`:       0x02C9, // ˉ
+	`\breve`:     0x02D8,
+	`\vec`:       0x20D7,
+	`\mathring`:  0x02DA,
+}
+
+// layoutAccent stacks a math accent glyph above the base.
 func layoutAccent(a *parser.Accent, opts Options) *Box {
-	base := layoutNode(a.Base, opts)
-	return base
+	base := layoutNode(a.Base, opts.WithStyle(opts.Style.Cramped()))
+	cp, ok := accentChar[a.Label]
+	if !ok {
+		return base
+	}
+	cm, ok := fontmetrics.Lookup(fontmetrics.FontMainRegular, cp)
+	if !ok {
+		return base
+	}
+	// Skew of the base character — used to shift the accent centre by
+	// upstream's accent layout (handle_accent in engine.rs).
+	skew := baseSkew(a.Base, opts)
+	accentBox := &Box{
+		Width: cm.Width, Height: cm.Height, Depth: cm.Depth, Color: opts.Color,
+		Content: Glyph{FontID: fontmetrics.FontMainRegular, CharCode: cp},
+	}
+	// KaTeX caps the accent's visible height contribution at 0.35em
+	// (handle_accent_clearance in upstream engine.rs).
+	visibleAccent := cm.Height
+	if visibleAccent > 0.35 {
+		visibleAccent = 0.35
+	}
+	height := base.Height + visibleAccent
+	return &Box{
+		Width:  base.Width,
+		Height: height,
+		Depth:  base.Depth,
+		Color:  opts.Color,
+		Content: Accent{
+			Base:      base,
+			AccentBox: accentBox,
+			Skew:      skew,
+		},
+	}
+}
+
+// baseSkew returns the skew metric of the symbol that forms the accent's
+// base, or 0 for non-symbol bases. Used by accent centring.
+func baseSkew(n parser.Node, opts Options) float64 {
+	var text string
+	var mode parser.Mode
+	switch v := n.(type) {
+	case *parser.MathOrd:
+		text, mode = v.Text, parser.ModeMath
+	case *parser.OrdGroup:
+		// Single-symbol ord group inherits the symbol's skew.
+		if len(v.Body) == 1 {
+			return baseSkew(v.Body[0], opts)
+		}
+		return 0
+	default:
+		return 0
+	}
+	r, _ := decodeFirstRune(text)
+	resolved := resolveCodepoint(text, r, mode)
+	font := selectFont(text, resolved, mode)
+	if cm, ok := fontmetrics.LookupWithFallback(font, resolved); ok {
+		return cm.Skew
+	}
+	return 0
 }
 
 func layoutAccentUnder(a *parser.AccentUnder, opts Options) *Box {

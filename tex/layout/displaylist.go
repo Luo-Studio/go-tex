@@ -159,6 +159,19 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 		})
 	case LeftRight:
 		emit(c.Inner, dl, x, y, scale)
+	case Accent:
+		baseTop := y + (b.Height-c.Base.Height)*scale
+		emit(c.Base, dl, x, baseTop, scale)
+		baselineY := baseTop + c.Base.Height*scale
+		accentX := x + (c.Base.Width-c.AccentBox.Width)*scale/2 + c.Skew*scale
+		dl.Items = append(dl.Items, GlyphPath{
+			X:        accentX,
+			Y:        baselineY,
+			Scale:    scale,
+			Font:     fontIDOfGlyph(c.AccentBox),
+			CharCode: charCodeOfGlyph(c.AccentBox),
+			Color:    b.Color,
+		})
 	case Radical:
 		// Surd glyph at left, baseline at body baseline.
 		baselineY := y + b.Height*scale
@@ -216,4 +229,18 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 	case Empty, Kern:
 		// no items
 	}
+}
+
+func fontIDOfGlyph(b *Box) string {
+	if g, ok := b.Content.(Glyph); ok {
+		return g.FontID
+	}
+	return "Main-Regular"
+}
+
+func charCodeOfGlyph(b *Box) rune {
+	if g, ok := b.Content.(Glyph); ok {
+		return g.CharCode
+	}
+	return 0
 }
