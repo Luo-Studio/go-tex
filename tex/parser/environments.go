@@ -225,10 +225,26 @@ func handleAlignedEnv(p *Parser, name string) (Node, error) {
 	}
 	// Auto-numbering: align/alignat (without *) and not split/aligned/alignedat.
 	autoNum := !strings.HasSuffix(name, "*") && base != "split" && base != "aligned" && base != "alignedat"
+	// Detect \nonumber / \notag in each row's cells and strip them; the row
+	// then gets a `false` auto-tag (no number), matching upstream.
+	rowHasNoNumber := make([]bool, len(rows))
+	for ri, row := range rows {
+		for ci, cell := range row {
+			if has, cleaned := stripNoNumber(cell); has {
+				rowHasNoNumber[ri] = true
+				rows[ri][ci] = cleaned
+			}
+		}
+	}
 	var tags []ArrayTag
 	if autoNum {
 		tags = make([]ArrayTag, len(rows))
 		for i := range tags {
+			if rowHasNoNumber[i] {
+				f := false
+				tags[i] = ArrayTag{Auto: &f}
+				continue
+			}
 			p.equationCounter++
 			num := fmt.Sprintf("%d", p.equationCounter)
 			tags[i] = ArrayTag{Explicit: []Node{
@@ -249,6 +265,52 @@ func handleAlignedEnv(p *Parser, name string) (Node, error) {
 		ArrayStretch:      1.0,
 		Tags:              tags,
 	}, nil
+}
+
+// stripNoNumber walks a single cell's body looking for any \nonumber /
+// \notag node. Returns (true, cleanedCell) if found; (false, cell)
+// otherwise. The cell is typically a Styling node wrapping an OrdGroup,
+// matching how align cells are built.
+func stripNoNumber(n Node) (bool, Node) {
+	switch v := n.(type) {
+	case *Styling:
+		found := false
+		newBody := make([]Node, 0, len(v.Body))
+		for _, c := range v.Body {
+			ok, cleaned := stripNoNumber(c)
+			if ok {
+				found = true
+			}
+			newBody = append(newBody, cleaned)
+		}
+		if found {
+			return true, &Styling{Mode: v.Mode, Style: v.Style, Body: newBody}
+		}
+		return false, n
+	case *OrdGroup:
+		found := false
+		newBody := make([]Node, 0, len(v.Body))
+		for _, c := range v.Body {
+			if _, isNN := c.(*NoNumber); isNN {
+				found = true
+				continue
+			}
+			ok, cleaned := stripNoNumber(c)
+			if ok {
+				found = true
+				newBody = append(newBody, cleaned)
+			} else {
+				newBody = append(newBody, c)
+			}
+		}
+		if found {
+			return true, &OrdGroup{Mode: v.Mode, Body: newBody, Loc: v.Loc}
+		}
+		return false, n
+	case *NoNumber:
+		return true, &OrdGroup{Mode: v.Mode}
+	}
+	return false, n
 }
 
 func handleSubarrayEnv(p *Parser, name string) (Node, error) {
