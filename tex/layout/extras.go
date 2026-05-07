@@ -1008,6 +1008,14 @@ func makeStretchyDelim(delim string, totalH float64, opts Options) *Box {
 	if delim == "." || delim == "" {
 		return NewKern(0)
 	}
+	// Tall vert delim (|/\vert/\Vert/...) past natural height: KaTeX SVG path.
+	const vertNaturalH = 1.0
+	if isVertDelim(delim) && totalH > vertNaturalH {
+		return makeVertDelimBox(totalH, false, opts)
+	}
+	if isDoubleVertDelim(delim) && totalH > vertNaturalH {
+		return makeVertDelimBox(totalH, true, opts)
+	}
 	cp, ok := delimChar(delim)
 	if !ok {
 		return NewKern(0)
@@ -1024,6 +1032,12 @@ func makeStretchyDelim(delim string, totalH float64, opts Options) *Box {
 				break
 			}
 		}
+	}
+	bestTotal := bestH + bestD
+	// If glyph too short, use stacked / SVG-tall delim (parens, brackets,
+	// braces, floor/ceil/group).
+	if stacked := makeStackedDelimIfNeeded(delim, totalH, bestTotal, opts); stacked != nil {
+		return stacked
 	}
 	return &Box{
 		Width: bestW, Height: bestH, Depth: bestD, Color: opts.Color,
