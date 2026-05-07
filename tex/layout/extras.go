@@ -3,6 +3,7 @@ package layout
 import (
 	"github.com/luo-studio/go-tex/tex/fontmetrics"
 	"github.com/luo-studio/go-tex/tex/parser"
+	"github.com/luo-studio/go-tex/tex/symbols"
 )
 
 // layoutTextBody lays out the body of a `\text{...}` node as a horizontal
@@ -95,7 +96,7 @@ func measurementToEm(m parser.Measurement, opts Options) float64 {
 }
 
 // layoutOp lays out an Op (\sum, \int, \lim, \sin, …). Symbol ops emit
-// the named glyph from Main-Regular (or Size1 for big ops); text ops
+// the named glyph from Size1/Size2 (Size2 in displaystyle); text ops
 // (\lim, \sin, …) emit the function name in upright Main-Regular.
 func layoutOp(op *parser.Op, opts Options) *Box {
 	if op.Body != nil && len(op.Body) > 0 {
@@ -106,7 +107,7 @@ func layoutOp(op *parser.Op, opts Options) *Box {
 	}
 	name := *op.Name
 	if op.Symbol {
-		return layoutSymbol(name, parser.ModeMath, opts)
+		return layoutOpSymbol(name, opts)
 	}
 	// Text op: lay out the function name (drop the leading '\') as a
 	// row of upright Main-Regular glyphs.
@@ -128,6 +129,37 @@ func layoutOp(op *parser.Op, opts Options) *Box {
 func layoutOperatorName(op *parser.OperatorName, opts Options) *Box {
 	textOpts := opts
 	return layoutTextBody(op.Body, textOpts)
+}
+
+// layoutOpSymbol lays out a symbol op (e.g. \\sum, \\int) using the
+// Size1/Size2 font for the glyph (Size2 in displaystyle).
+func layoutOpSymbol(name string, opts Options) *Box {
+	info, ok := symbols.Lookup(name, symbols.ModeMath)
+	cp := rune(0)
+	if ok {
+		cp = info.Codepoint
+	}
+	if cp == 0 {
+		return layoutSymbol(name, parser.ModeMath, opts)
+	}
+	font := fontmetrics.FontSize1Regular
+	if opts.Style.IsDisplay() {
+		font = fontmetrics.FontSize2Regular
+	}
+	cm, found := fontmetrics.Lookup(font, cp)
+	if !found {
+		cm, found = fontmetrics.Lookup(fontmetrics.FontSize1Regular, cp)
+		if found {
+			font = fontmetrics.FontSize1Regular
+		}
+	}
+	if !found {
+		return layoutSymbol(name, parser.ModeMath, opts)
+	}
+	return &Box{
+		Width: cm.Width + cm.Italic, Height: cm.Height, Depth: cm.Depth, Color: opts.Color,
+		Content: Glyph{FontID: font, CharCode: cp},
+	}
 }
 
 // accentChar maps an accent label to the glyph codepoint upstream's
