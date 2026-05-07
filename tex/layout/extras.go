@@ -185,7 +185,8 @@ func layoutDelimSizing(d *parser.DelimSizing, opts Options) *Box {
 }
 
 // layoutOpSymbol lays out a symbol op (e.g. \\sum, \\int) using the
-// Size1/Size2 font for the glyph (Size2 in displaystyle).
+// Size1/Size2 font for the glyph (Size2 in displaystyle, except for
+// ops in NO_SUCCESSOR like \\smallint which always use Size1).
 func layoutOpSymbol(name string, opts Options) *Box {
 	info, ok := symbols.Lookup(name, symbols.ModeMath)
 	cp := rune(0)
@@ -196,7 +197,8 @@ func layoutOpSymbol(name string, opts Options) *Box {
 		return layoutSymbol(name, parser.ModeMath, opts)
 	}
 	font := fontmetrics.FontSize1Regular
-	if opts.Style.IsDisplay() {
+	large := opts.Style.IsDisplay() && name != `\smallint`
+	if large {
 		font = fontmetrics.FontSize2Regular
 	}
 	cm, found := fontmetrics.Lookup(font, cp)
