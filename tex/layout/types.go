@@ -29,6 +29,9 @@ type Options struct {
 	AlignRelationSpacing   *float64 // capped relation spacing inside align/aligned
 	LeftRightDelimHeight   *float64 // stretch height for \middle delimiters in second pass
 	InterGlyphKernEm       float64
+	// FontOverride forces glyph lookups to a specific font name
+	// (e.g. "Main-Regular" inside \\mathrm, "Main-Bold" inside \\mathbf).
+	FontOverride string
 }
 
 // DefaultOptions returns the upstream LayoutOptions::default() — display

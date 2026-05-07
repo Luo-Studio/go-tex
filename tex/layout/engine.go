@@ -90,7 +90,15 @@ func layoutNode(n parser.Node, opts Options) *Box {
 		// Colors flow through; we don't track them in width/height.
 		return layoutExpression(v.Body, opts.WithColor(opts.Color), true)
 	case *parser.Font:
-		return layoutNode(v.Body, opts)
+		// Map mathXX -> KaTeX font name (e.g. mathrm -> Main-Regular,
+		// mathbf -> Main-Bold). For unknown families, fall back to no
+		// override.
+		fontOverride := mathFontToKaTeX(v.Font)
+		newOpts := opts
+		if fontOverride != "" {
+			newOpts.FontOverride = fontOverride
+		}
+		return layoutNode(v.Body, newOpts)
 	case *parser.MClass:
 		return layoutExpression(v.Body, opts, true)
 	case *parser.Styling:
@@ -156,7 +164,10 @@ func layoutNode(n parser.Node, opts Options) *Box {
 func layoutSymbol(text string, mode parser.Mode, opts Options) *Box {
 	ch, _ := decodeFirstRune(text)
 	resolved := resolveCodepoint(text, ch, mode)
-	font := selectFont(text, resolved, mode)
+	font := opts.FontOverride
+	if font == "" {
+		font = selectFont(text, resolved, mode)
+	}
 	cm, ok := fontmetrics.LookupWithFallback(font, resolved)
 	if !ok && mode == parser.ModeMath && font != fontmetrics.FontMathItalic {
 		// Upstream second-chance lookup in Math-Italic for math-mode
@@ -221,6 +232,35 @@ func selectFont(text string, resolved rune, mode parser.Mode) string {
 
 func isASCIILetter(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+// mathFontToKaTeX maps the parser's font name (mathrm, mathbf, ...) to
+// the KaTeX font name (Main-Regular, Main-Bold, ...). Returns "" for
+// unknown names.
+func mathFontToKaTeX(font string) string {
+	switch font {
+	case "mathrm":
+		return "Main-Regular"
+	case "mathbf":
+		return "Main-Bold"
+	case "mathit":
+		return "Main-Italic"
+	case "mathnormal":
+		return "Math-Italic"
+	case "mathsf":
+		return "SansSerif-Regular"
+	case "mathtt":
+		return "Typewriter-Regular"
+	case "mathfrak":
+		return "Fraktur-Regular"
+	case "mathcal":
+		return "Caligraphic-Regular"
+	case "mathbb":
+		return "AMS-Regular"
+	case "mathscr":
+		return "Script-Regular"
+	}
+	return ""
 }
 
 // isMathItalicGreek covers lowercase Greek and variant forms that go in
