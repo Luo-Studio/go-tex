@@ -171,8 +171,14 @@ func layoutSymbol(text string, mode parser.Mode, opts Options) *Box {
 		// No metrics — emit a zero-width placeholder box.
 		return &Box{Color: opts.Color, Content: Glyph{FontID: font, CharCode: ch}}
 	}
+	// KaTeX SymbolNode.toNode applies `margin-right: italic` for math
+	// glyphs, so the advance width = width + italic.
+	advance := cm.Width
+	if mode == parser.ModeMath {
+		advance += cm.Italic
+	}
 	return &Box{
-		Width:   cm.Width,
+		Width:   advance,
 		Height:  cm.Height,
 		Depth:   cm.Depth,
 		Color:   opts.Color,
