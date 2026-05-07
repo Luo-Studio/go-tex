@@ -84,7 +84,7 @@ func envHandler(p *Parser, name string) (Node, error) {
 }
 
 func handleSmallMatrixEnv(p *Parser, name string) (Node, error) {
-	rows, rowGaps, err := parseArrayBody(p, StyleScript)
+	rows, rowGaps, hlines, err := parseArrayBody(p, StyleScript)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func handleSmallMatrixEnv(p *Parser, name string) (Node, error) {
 		Mode:              p.mode,
 		Body:              rows,
 		RowGaps:           rowGaps,
-		HLinesBeforeRow:   buildEmptyHLines(len(rows)),
+		HLinesBeforeRow:   hlines,
 		Cols:              cols,
 		HskipBeforeAndAft: boolPtr(false),
 		ArrayStretch:      0.5,
@@ -129,7 +129,7 @@ func handleAlignedEnv(p *Parser, name string) (Node, error) {
 		}
 	}
 
-	rows, rowGaps, err := parseArrayBody(p, StyleDisplay)
+	rows, rowGaps, hlines, err := parseArrayBody(p, StyleDisplay)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func handleAlignedEnv(p *Parser, name string) (Node, error) {
 			Mode:            p.mode,
 			Body:            rows,
 			RowGaps:         rowGaps,
-			HLinesBeforeRow: buildEmptyHLines(len(rows)),
+			HLinesBeforeRow: hlines,
 			ArrayStretch:    1.0,
 		}, nil
 	}
@@ -151,7 +151,7 @@ func handleAlignedEnv(p *Parser, name string) (Node, error) {
 			Mode:              p.mode,
 			Body:              rows,
 			RowGaps:           rowGaps,
-			HLinesBeforeRow:   buildEmptyHLines(len(rows)),
+			HLinesBeforeRow:   hlines,
 			Cols:              cols,
 			AddJot:            boolPtr(true),
 			ColSeparationType: &gatherSep,
@@ -199,7 +199,7 @@ func handleAlignedEnv(p *Parser, name string) (Node, error) {
 		Mode:              p.mode,
 		Body:              rows,
 		RowGaps:           rowGaps,
-		HLinesBeforeRow:   buildEmptyHLines(len(rows)),
+		HLinesBeforeRow:   hlines,
 		AddJot:            boolPtr(true),
 		Cols:              cols,
 		ColSeparationType: &sepType,
@@ -223,7 +223,7 @@ func handleSubarrayEnv(p *Parser, name string) (Node, error) {
 		p.advance()
 	}
 	cols := parseColumnSpec(spec.String())
-	rows, rowGaps, err := parseArrayBody(p, StyleScript)
+	rows, rowGaps, hlines, err := parseArrayBody(p, StyleScript)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func handleSubarrayEnv(p *Parser, name string) (Node, error) {
 		Mode:            p.mode,
 		Body:            rows,
 		RowGaps:         rowGaps,
-		HLinesBeforeRow: buildEmptyHLines(len(rows)),
+		HLinesBeforeRow: hlines,
 		Cols:            cols,
 		ArrayStretch:    0.5,
 	}, nil
@@ -245,39 +245,57 @@ func dCellStyle(name string) StyleStr {
 	return StyleText
 }
 
-// parseArrayBody collects rows of cells until \end is seen.
-//
-//	row    := cell ('&' cell)*
-//	rows   := row ('\\\\' row)*
-//	body   := rows
+// parseArrayBody collects rows of cells until \end is seen, also tracking
+// per-row \hline / \hdashline markers. Returns rows, rowGaps, and the
+// (rows+1)-element hLinesBeforeRow slice (each entry is a list of bools
+// where true means \hdashline, false means \hline).
 //
 // Each cell is wrapped in `Styling { style: cellStyle, body: [OrdGroup{...}] }`,
 // matching upstream's parse_array.
-func parseArrayBody(p *Parser, cellStyle StyleStr) ([][]Node, []*Measurement, error) {
+func parseArrayBody(p *Parser, cellStyle StyleStr) ([][]Node, []*Measurement, [][]bool, error) {
 	rows := [][]Node{}
 	rowGaps := []*Measurement{}
+	hlines := [][]bool{}
+	hlines = append(hlines, readHlines(p))
 	for {
-		p.consumeSpaces()
-		for p.cur.Text == `\hline` || p.cur.Text == `\hdashline` || p.cur.Text == `\relax` {
-			p.advance()
-			p.consumeSpaces()
-		}
 		if p.cur.Text == `\end` || p.cur.IsEOF() {
 			break
 		}
 		row, err := parseArrayRow(p, cellStyle)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		rows = append(rows, row)
 		if p.cur.Text == `\\` || p.cur.Text == `\cr` {
 			p.advance()
 			rowGaps = append(rowGaps, nil)
+			hlines = append(hlines, readHlines(p))
 			continue
 		}
 		break
 	}
-	return rows, rowGaps, nil
+	if len(hlines) == len(rows) {
+		hlines = append(hlines, []bool{})
+	}
+	return rows, rowGaps, hlines, nil
+}
+
+// readHlines consumes a run of \hline / \hdashline / \relax tokens and
+// returns a slice of bools (true = \hdashline, false = \hline). Mirrors
+// upstream's get_hlines.
+func readHlines(p *Parser) []bool {
+	out := []bool{}
+	p.consumeSpaces()
+	for p.cur.Text == `\relax` {
+		p.advance()
+		p.consumeSpaces()
+	}
+	for p.cur.Text == `\hline` || p.cur.Text == `\hdashline` {
+		out = append(out, p.cur.Text == `\hdashline`)
+		p.advance()
+		p.consumeSpaces()
+	}
+	return out
 }
 
 func parseArrayRow(p *Parser, cellStyle StyleStr) ([]Node, error) {
@@ -328,7 +346,7 @@ func handleMatrixEnv(p *Parser, fullName, base string) (Node, error) {
 		}
 	}
 
-	rows, rowGaps, err := parseArrayBody(p, cellStyle)
+	rows, rowGaps, hlines, err := parseArrayBody(p, cellStyle)
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +356,6 @@ func handleMatrixEnv(p *Parser, fullName, base string) (Node, error) {
 		c := colAlign
 		cols[i] = AlignSpec{Type: AlignTypeAlign, Align: &c}
 	}
-	hlines := buildEmptyHLines(len(rows))
 	arr := &Array{
 		Mode:            p.mode,
 		Body:            rows,
@@ -375,7 +392,7 @@ func matrixDelims(base string) [2]string {
 
 func handleCasesEnv(p *Parser, name string) (Node, error) {
 	cellStyle := dCellStyle(name)
-	rows, rowGaps, err := parseArrayBody(p, cellStyle)
+	rows, rowGaps, hlines, err := parseArrayBody(p, cellStyle)
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +409,7 @@ func handleCasesEnv(p *Parser, name string) (Node, error) {
 		Mode:            p.mode,
 		Body:            rows,
 		RowGaps:         rowGaps,
-		HLinesBeforeRow: buildEmptyHLines(len(rows)),
+		HLinesBeforeRow: hlines,
 		Cols:            cols,
 		ArrayStretch:    1.2,
 	}
@@ -422,7 +439,7 @@ func handleArrayEnv(p *Parser, fullName, base string) (Node, error) {
 	if base == "darray" {
 		cellStyle = StyleDisplay
 	}
-	rows, rowGaps, err := parseArrayBody(p, cellStyle)
+	rows, rowGaps, hlines, err := parseArrayBody(p, cellStyle)
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +447,7 @@ func handleArrayEnv(p *Parser, fullName, base string) (Node, error) {
 		Mode:              p.mode,
 		Body:              rows,
 		RowGaps:           rowGaps,
-		HLinesBeforeRow:   buildEmptyHLines(len(rows)),
+		HLinesBeforeRow:   hlines,
 		Cols:              cols,
 		HskipBeforeAndAft: boolPtr(true),
 		ArrayStretch:      arrayStretchFromMacro(p, 1.0),

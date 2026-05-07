@@ -14,7 +14,15 @@ func parseEnclose(p *Parser) (Node, error) {
 	cmd := p.cur.Text
 	p.advance()
 	switch cmd {
-	case `\fbox`, `\cancel`, `\bcancel`, `\xcancel`, `\sout`, `\phase`, `\angl`:
+	case `\fbox`, `\angl`:
+		// HBox-arg: text mode + Styling[text] wrap.
+		body, err := parseTextModeArg(p, cmd)
+		if err != nil {
+			return nil, err
+		}
+		styled := &Styling{Mode: ModeText, Style: StyleText, Body: []Node{body}}
+		return &Enclose{Mode: p.mode, Label: cmd, Body: styled}, nil
+	case `\cancel`, `\bcancel`, `\xcancel`, `\sout`, `\phase`:
 		body, err := parseFunctionArg(p, cmd)
 		if err != nil {
 			return nil, err
