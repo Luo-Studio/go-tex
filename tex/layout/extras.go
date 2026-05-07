@@ -305,6 +305,16 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 	if a.Label == `\textcircled` {
 		return layoutTextcircled(base, opts)
 	}
+	// KaTeX SVG-path wide accents (\widehat, \widetilde, \widecheck,
+	// \overgroup, \undergroup, \utilde, \vec): use the SVG accent
+	// from katex_svg, sized to base width.
+	baseW := base.Width
+	if baseW < 0.5 {
+		baseW = 0.5
+	}
+	if pcmds, pw, ph, _, ok := katexAccentPath(a.Label, baseW, accentOrdGroupLen(a.Base)); ok {
+		return layoutSVGAccent(a, base, pcmds, pw, ph, opts)
+	}
 	cp, ok := accentChar[a.Label]
 	if !ok {
 		return base
@@ -390,6 +400,89 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 			Skew:       skew,
 			Clearance:  clearance,
 			Correction: cm.Height - visCap,
+		},
+	}
+}
+
+// accentOrdGroupLen mirrors upstream accent_ordgroup_len: ordgroup body
+// length, else 1. Used for picking widehat/widetilde asset variant.
+func accentOrdGroupLen(n parser.Node) int {
+	if og, ok := n.(*parser.OrdGroup); ok {
+		if len(og.Body) > 0 {
+			return len(og.Body)
+		}
+	}
+	return 1
+}
+
+// glyphSkewLaid returns the skew metric of the laid-out body's last
+// glyph (mirrors upstream glyph_skew applied to LayoutBox).
+func glyphSkewLaid(b *Box) float64 {
+	switch c := b.Content.(type) {
+	case Glyph:
+		if cm, ok := fontmetrics.LookupWithFallback(c.FontID, c.CharCode); ok {
+			return cm.Skew
+		}
+	case HBox:
+		if len(c.Children) > 0 {
+			return glyphSkewLaid(c.Children[len(c.Children)-1])
+		}
+	}
+	return 0
+}
+
+// vecSkewExtraRightEm: KaTeX nudges the \vec arrow slightly right.
+const vecSkewExtraRightEm = 0.018
+
+// layoutSVGAccent builds an Accent box with an SVG-path accent box.
+// Mirrors upstream layout_accent's KaTeX-SVG branch.
+func layoutSVGAccent(a *parser.Accent, base *Box, cmds []path.Command, w, h float64, opts Options) *Box {
+	isBelow := false
+	isShifty := a.IsShifty != nil && *a.IsShifty
+	// SVG accent: KaTeX paths use SVG coords (y down): height=0, depth=h.
+	accentBox := &Box{
+		Width: w, Height: 0, Depth: h, Color: opts.Color,
+		Content: SvgPath{Commands: cmds, Fill: true},
+	}
+	gap := 0.065
+	var clearance float64
+	xHeight := opts.Metrics().XHeight
+	if a.Label == `\vec` {
+		c := base.Height - xHeight
+		if c < 0 {
+			c = 0
+		}
+		clearance = c
+	} else {
+		clearance = base.Height + gap
+	}
+	var height, depth float64
+	if a.Label == `\vec` {
+		height = clearance + h
+		depth = base.Depth
+	} else {
+		height = base.Height + gap + h
+		depth = base.Depth
+	}
+	skew := 0.0
+	if a.Label == `\vec` {
+		if isShifty {
+			skew = glyphSkewLaid(base)
+		}
+		skew += vecSkewExtraRightEm
+	}
+	return &Box{
+		Width:  base.Width,
+		Height: height,
+		Depth:  depth,
+		Color:  opts.Color,
+		Content: Accent{
+			Base:       base,
+			AccentBox:  accentBox,
+			Clearance:  clearance,
+			Skew:       skew,
+			IsBelow:    isBelow,
+			UnderGapEm: 0,
 		},
 	}
 }

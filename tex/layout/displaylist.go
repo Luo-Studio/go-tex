@@ -412,18 +412,25 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 		baseTop := y + (b.Height-c.Base.Height)*scale
 		emit(c.Base, dl, baseX, baseTop, scale)
 		baseBaselineY := baseTop + c.Base.Height*scale
-		// Upstream to_display.rs:
-		//   accent_y = base_baseline - clearance + (accent.h - min(0.35, accent.h))
-		accentY := baseBaselineY + (-c.Clearance+c.Correction)*scale
-		accentX := x + (b.Width-c.AccentBox.Width)*scale/2 + c.Skew*scale
-		dl.Items = append(dl.Items, GlyphPath{
-			X:        accentX,
-			Y:        accentY,
-			Scale:    scale,
-			Font:     fontIDOfGlyph(c.AccentBox),
-			CharCode: charCodeOfGlyph(c.AccentBox),
-			Color:    b.Color,
-		})
+		if c.IsBelow {
+			// Below-accent: bottom (depth) sits below the body.
+			accentX := x + (b.Width-c.AccentBox.Width)*scale/2
+			accentY := baseBaselineY + (c.Base.Depth+c.UnderGapEm)*scale + c.AccentBox.Height*scale
+			emit(c.AccentBox, dl, accentX, accentY-c.AccentBox.Height*scale, scale)
+		} else {
+			isSVGAccent := c.AccentBox.Height <= 0.001
+			accentX := x + (b.Width-c.AccentBox.Width)*scale/2 + c.Skew*scale
+			var accentBaselineY float64
+			if isSVGAccent {
+				accentBaselineY = baseBaselineY - c.Clearance*scale - c.AccentBox.Depth*scale
+			} else {
+				// Glyph accent: shift down by max(0, accent.h - 0.35).
+				accentBaselineY = baseBaselineY + (-c.Clearance+c.Correction)*scale
+			}
+			// emit accent: its baseline is accent_top + accent.Height.
+			accentTop := accentBaselineY - c.AccentBox.Height*scale
+			emit(c.AccentBox, dl, accentX, accentTop, scale)
+		}
 	case Radical:
 		// Mirror upstream: surd starts at x + index_offset, body
 		// follows at surd_x + radical_width (where radical_width =
