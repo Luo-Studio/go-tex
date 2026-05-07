@@ -146,15 +146,20 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 			emit(c.Sub, dl, x+baseW, subTop, subScale)
 		}
 	case Overline:
-		emit(c.Body, dl, x, y+4*c.RuleThickness*scale, scale)
+		// Box height = body.height + 3*rt. Body sits at the bottom of the
+		// box, with rule centered 2.5*rt above body's top — i.e. 0.5*rt
+		// below the box top.
+		emit(c.Body, dl, x, y+3*c.RuleThickness*scale, scale)
 		dl.Items = append(dl.Items, Line{
-			X: x, Y: y + 2*c.RuleThickness*scale,
+			X: x, Y: y + 0.5*c.RuleThickness*scale,
 			Width: b.Width * scale, Thickness: c.RuleThickness * scale, Color: b.Color,
 		})
 	case Underline:
+		// Box depth = body.depth + 3*rt. Body sits at the top, with rule
+		// centered 2.5*rt below body's bottom (baseline + body.depth).
 		emit(c.Body, dl, x, y, scale)
 		dl.Items = append(dl.Items, Line{
-			X: x, Y: y + (b.Height+b.Depth-2*c.RuleThickness)*scale,
+			X: x, Y: y + (c.Body.Height+c.Body.Depth+2.5*c.RuleThickness)*scale,
 			Width: b.Width * scale, Thickness: c.RuleThickness * scale, Color: b.Color,
 		})
 	case LeftRight:

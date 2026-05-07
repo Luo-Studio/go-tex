@@ -498,13 +498,14 @@ func makeStretchyDelim(delim string, totalH float64, opts Options) *Box {
 func layoutOverline(o *parser.Overline, opts Options) *Box {
 	body := layoutNode(o.Body, opts.WithStyle(opts.Style.Cramped()))
 	rt := opts.Metrics().DefaultRuleThickness
-	return &Box{Width: body.Width, Height: body.Height + 4*rt, Depth: body.Depth, Color: opts.Color,
+	// Upstream: height = body.height + 3*rule.
+	return &Box{Width: body.Width, Height: body.Height + 3*rt, Depth: body.Depth, Color: opts.Color,
 		Content: Overline{Body: body, RuleThickness: rt}}
 }
 
 func layoutUnderline(o *parser.Underline, opts Options) *Box {
 	body := layoutNode(o.Body, opts)
 	rt := opts.Metrics().DefaultRuleThickness
-	return &Box{Width: body.Width, Height: body.Height, Depth: body.Depth + 4*rt, Color: opts.Color,
+	return &Box{Width: body.Width, Height: body.Height, Depth: body.Depth + 3*rt, Color: opts.Color,
 		Content: Underline{Body: body, RuleThickness: rt}}
 }
