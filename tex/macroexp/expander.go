@@ -376,10 +376,10 @@ func defaultMacros() map[string]Definition {
 	}
 	// Function-based macros.
 	m[`\TextOrMath`] = Definition{Fn: textOrMath}
-	m[`\def`] = Definition{Fn: handleDef(false)}
-	m[`\gdef`] = Definition{Fn: handleDef(false)}
-	m[`\edef`] = Definition{Fn: handleDef(false)}
-	m[`\xdef`] = Definition{Fn: handleDef(false)}
+	m[`\def`] = Definition{Fn: handleDef(false, false)}
+	m[`\gdef`] = Definition{Fn: handleDef(false, false)}
+	m[`\edef`] = Definition{Fn: handleDef(false, true)}
+	m[`\xdef`] = Definition{Fn: handleDef(false, true)}
 	m[`\newcommand`] = Definition{Fn: handleNewCommand(true, false)}
 	m[`\renewcommand`] = Definition{Fn: handleNewCommand(false, true)}
 	m[`\providecommand`] = Definition{Fn: handleNewCommand(true, true)}
@@ -766,7 +766,7 @@ func secondOfTwo(e *Expander) ([]lexer.Token, error) {
 // The body is stored as a token slice (preserving original source
 // positions), so the resulting AST nodes carry locs from the original
 // input — matching the upstream behaviour.
-func handleDef(global bool) FnMacro {
+func handleDef(global, expandBody bool) FnMacro {
 	return func(e *Expander) ([]lexer.Token, error) {
 		var name string
 		for {
@@ -830,10 +830,89 @@ func handleDef(global bool) FnMacro {
 			}
 			bodyToks = append(bodyToks, tt)
 		}
+		// \edef / \xdef: fully expand body tokens at definition time.
+		if expandBody {
+			expanded, err := e.expandTokensFully(bodyToks)
+			if err != nil {
+				return nil, err
+			}
+			bodyToks = expanded
+		}
 		e.macros[name] = Definition{Tokens: bodyToks, NumArg: numArgs}
 		_ = global
 		return nil, nil
 	}
+}
+
+// expandTokensFully runs the gullet over the given tokens, fully
+// expanding any macro/function calls, and returns the resulting flat
+// token list. Mirrors upstream MacroExpander::expand_tokens.
+func (e *Expander) expandTokensFully(tokens []lexer.Token) ([]lexer.Token, error) {
+	// Save the existing stack and replace with the new tokens (in stack
+	// order — top is last). Our `tokens` are in document order, so push
+	// them in reverse.
+	saved := e.stack
+	e.stack = make([]lexer.Token, 0, len(tokens))
+	for i := len(tokens) - 1; i >= 0; i-- {
+		e.stack = append(e.stack, tokens[i])
+	}
+	var result []lexer.Token
+	for len(e.stack) > 0 {
+		// Peek the top token without lexing more. If it's an
+		// expandable macro, expand once and loop. Otherwise pop it as
+		// a literal and append to result.
+		top := e.stack[len(e.stack)-1]
+		if top.NoExpand {
+			e.stack = e.stack[:len(e.stack)-1]
+			result = append(result, top)
+			continue
+		}
+		def, ok := e.macros[top.Text]
+		if !ok {
+			e.stack = e.stack[:len(e.stack)-1]
+			result = append(result, top)
+			continue
+		}
+		// Expandable macro: pop and expand.
+		e.stack = e.stack[:len(e.stack)-1]
+		if e.expand++; e.expand > e.maxExp {
+			e.stack = saved
+			return nil, fmt.Errorf("macro expansion limit reached at %q", top.Text)
+		}
+		switch {
+		case def.Fn != nil:
+			toks, err := def.Fn(e)
+			if err != nil {
+				e.stack = saved
+				return nil, err
+			}
+			e.stack = append(e.stack, toks...)
+		case def.Tokens != nil:
+			toks, err := expandTokens(e, def.Tokens, def.NumArg)
+			if err != nil {
+				e.stack = saved
+				return nil, err
+			}
+			e.stack = append(e.stack, toks...)
+		case def.NumArg > 0:
+			args, err := e.consumeArgs(def.NumArg)
+			if err != nil {
+				e.stack = saved
+				return nil, err
+			}
+			expansion, err := substituteArgs(def.Text, args)
+			if err != nil {
+				e.stack = saved
+				return nil, err
+			}
+			e.stack = append(e.stack, lexAll(expansion)...)
+		default:
+			toks := lexAll(def.Text)
+			e.stack = append(e.stack, toks...)
+		}
+	}
+	e.stack = saved
+	return result, nil
 }
 
 // textOrMath: \TextOrMath{textBranch}{mathBranch}.
