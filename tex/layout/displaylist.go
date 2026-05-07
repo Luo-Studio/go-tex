@@ -334,6 +334,26 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 				Color:     b.Color,
 			})
 		}
+	case OpLimits:
+		// Mirror upstream emit. baselineY in our top-left coords:
+		baselineY := y + b.Height*scale
+		boxW := b.Width * scale
+		// Base centered horizontally; baseline shifted by base_shift.
+		baseX := x + (boxW-c.Base.Width*scale)/2
+		baseTop := baselineY + c.BaseShift*scale - c.Base.Height*scale
+		emit(c.Base, dl, baseX, baseTop, scale)
+		if c.Sup != nil {
+			childScale := scale * c.SupScale
+			supX := x + (boxW-c.Sup.Width*childScale)/2 + c.Slant*scale/2
+			supBaseline := baselineY - (c.Base.Height-c.BaseShift)*scale - c.SupKern*scale - c.Sup.Depth*childScale
+			emit(c.Sup, dl, supX, supBaseline-c.Sup.Height*childScale, childScale)
+		}
+		if c.Sub != nil {
+			childScale := scale * c.SubScale
+			subX := x + (boxW-c.Sub.Width*childScale)/2 - c.Slant*scale/2
+			subBaseline := baselineY + (c.Base.Depth+c.BaseShift)*scale + c.SubKern*scale + c.Sub.Height*childScale
+			emit(c.Sub, dl, subX, subBaseline-c.Sub.Height*childScale, childScale)
+		}
 	case SupSub:
 		// Base baseline at y + b.Height*scale.
 		emit(c.Base, dl, x, y+(b.Height-c.Base.Height)*scale, scale)
@@ -484,14 +504,17 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 			// Right
 			dl.Items = append(dl.Items, Rect{X: x + outerW - bt, Y: y, Width: bt, Height: outerHD, Color: c.BorderColor})
 		}
-		// Body at outer.baseline (= y + b.Height*scale), shifted right by padding+border.
-		bodyOffsetEm := c.Padding
-		if c.HasBorder {
-			bodyOffsetEm += c.BorderThickness
-		}
+		// Body shift: upstream always uses padding + border_thickness
+		// (even on no-border \colorbox — matches the inner_offset
+		// term in to_display.rs).
+		bodyOffsetEm := c.Padding + c.BorderThickness
 		// In our top-left convention, the body's top sits at outer.top + outer_pad*scale
 		// so its baseline lines up with the outer baseline.
-		bodyTopY := y + bodyOffsetEm*scale
+		outerPad := c.Padding
+		if c.HasBorder {
+			outerPad += c.BorderThickness
+		}
+		bodyTopY := y + outerPad*scale
 		emit(c.Body, dl, x+bodyOffsetEm*scale, bodyTopY, scale)
 	case RaiseBox:
 		// Positive Shift moves the body up. The wrapping box has

@@ -5,9 +5,168 @@ import (
 	"github.com/luo-studio/go-tex/tex/parser"
 )
 
+// shouldUseOpLimits decides whether base+sup+sub should be drawn as a
+// big op with limits stacked above/below (rather than to the right).
+// Mirrors upstream should_use_op_limits.
+func shouldUseOpLimits(base parser.Node, opts Options) bool {
+	switch v := base.(type) {
+	case *parser.Op:
+		ahss := false
+		if v.AlwaysHandleSupSub != nil {
+			ahss = *v.AlwaysHandleSupSub
+		}
+		return v.Limits && (opts.Style.IsDisplay() || ahss)
+	case *parser.OperatorName:
+		return v.AlwaysHandleSupSub && (opts.Style.IsDisplay() || v.Limits)
+	}
+	return false
+}
+
+// layoutOpWithLimits handles `\sum_a^b`, `\lim\limits_x`, etc.: base
+// with sub stacked below, sup stacked above. Mirrors upstream
+// layout_op_with_limits + layout_op_limits_inner.
+func layoutOpWithLimits(base parser.Node, sup, sub parser.Node, opts Options) *Box {
+	var baseBox *Box
+	suppressBaseShift := false
+	switch v := base.(type) {
+	case *parser.Op:
+		if v.SuppressBaseShift != nil && *v.SuppressBaseShift {
+			suppressBaseShift = true
+		}
+		baseBox = layoutOp(v, opts)
+	case *parser.OperatorName:
+		baseBox = layoutOperatorName(v, opts)
+	default:
+		// Fallback to regular SupSub layout.
+		return layoutSupSubNode(base, sup, sub, opts)
+	}
+
+	// Center symbol-style ops on the math axis (KaTeX baseShift).
+	baseShift := 0.0
+	if op, ok := base.(*parser.Op); ok && op.Symbol && !suppressBaseShift {
+		axis := opts.Metrics().AxisHeight
+		baseShift = (baseBox.Height-baseBox.Depth)/2 - axis
+	}
+	legacyKern := !suppressBaseShift
+
+	m := opts.Metrics()
+	supStyle := opts.Style.Superscript()
+	subStyle := opts.Style.Subscript()
+	supRatio := supStyle.SizeMultiplier() / opts.Style.SizeMultiplier()
+	subRatio := subStyle.SizeMultiplier() / opts.Style.SizeMultiplier()
+
+	extraKern := 0.0
+	if legacyKern {
+		extraKern = 0.08
+	}
+
+	var supBox, subBox *Box
+	supKern, subKern := 0.0, 0.0
+	if sup != nil {
+		supBox = layoutNode(sup, opts.WithStyle(supStyle))
+		d := supBox.Depth * supRatio
+		if !legacyKern {
+			d = supBox.Depth
+		}
+		supKern = m.BigOpSpacing1 + extraKern
+		if v := m.BigOpSpacing3 - d + extraKern; v > supKern {
+			supKern = v
+		}
+	}
+	if sub != nil {
+		subBox = layoutNode(sub, opts.WithStyle(subStyle))
+		h := subBox.Height * subRatio
+		if !legacyKern {
+			h = subBox.Height
+		}
+		subKern = m.BigOpSpacing2 + extraKern
+		if v := m.BigOpSpacing4 - h + extraKern; v > subKern {
+			subKern = v
+		}
+	}
+	sp5 := m.BigOpSpacing5
+
+	var totalH, totalD, totalW float64
+	switch {
+	case supBox != nil && subBox != nil:
+		supH := supBox.Height * supRatio
+		supD := supBox.Depth * supRatio
+		subH := subBox.Height * subRatio
+		subD := subBox.Depth * subRatio
+		bottom := sp5 + subH + subD + subKern + baseBox.Depth + baseShift
+		totalH = baseBox.Height - baseShift + supKern + supH + supD + sp5
+		totalD = bottom
+		totalW = baseBox.Width
+		if w := supBox.Width * supRatio; w > totalW {
+			totalW = w
+		}
+		if w := subBox.Width * subRatio; w > totalW {
+			totalW = w
+		}
+	case subBox != nil:
+		subH := subBox.Height * subRatio
+		subD := subBox.Depth * subRatio
+		totalH = baseBox.Height - baseShift
+		totalD = baseBox.Depth + baseShift + subKern + subH + subD + sp5
+		totalW = baseBox.Width
+		if w := subBox.Width * subRatio; w > totalW {
+			totalW = w
+		}
+	case supBox != nil:
+		supH := supBox.Height * supRatio
+		supD := supBox.Depth * supRatio
+		totalH = baseBox.Height - baseShift + supKern + supH + supD + sp5
+		totalD = baseBox.Depth + baseShift
+		totalW = baseBox.Width
+		if w := supBox.Width * supRatio; w > totalW {
+			totalW = w
+		}
+	default:
+		return baseBox
+	}
+
+	// Slant of the base (italic correction of the symbol). Used to
+	// shift the sup right and sub left, so they're centred relative to
+	// the slanted glyph rather than its bounding box.
+	slant := opSymbolSlant(baseBox)
+
+	return &Box{
+		Width: totalW, Height: totalH, Depth: totalD, Color: opts.Color,
+		Content: OpLimits{
+			Base:      baseBox,
+			Sup:       supBox,
+			Sub:       subBox,
+			BaseShift: baseShift,
+			SupKern:   supKern,
+			SubKern:   subKern,
+			Slant:     slant,
+			SupScale:  supRatio,
+			SubScale:  subRatio,
+		},
+	}
+}
+
+// opSymbolSlant returns the italic correction of the operator glyph.
+func opSymbolSlant(b *Box) float64 {
+	switch c := b.Content.(type) {
+	case Glyph:
+		if cm, ok := fontmetrics.LookupWithFallback(c.FontID, c.CharCode); ok {
+			return cm.Italic
+		}
+	case HBox:
+		if len(c.Children) > 0 {
+			return opSymbolSlant(c.Children[len(c.Children)-1])
+		}
+	}
+	return 0
+}
+
 // layoutSupSubNode implements TeXbook Rule 18 (super-/subscript shifts).
 // Mirrors upstream's layout_supsub in engine.rs.
 func layoutSupSubNode(base, sup, sub parser.Node, opts Options) *Box {
+	if base != nil && shouldUseOpLimits(base, opts) {
+		return layoutOpWithLimits(base, sup, sub, opts)
+	}
 	var baseBox *Box
 	if base != nil {
 		baseBox = layoutNode(base, opts)
