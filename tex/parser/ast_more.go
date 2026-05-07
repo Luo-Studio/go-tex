@@ -441,6 +441,22 @@ func (i *Internal) MarshalJSON() ([]byte, error) {
 	return withType("internal", (*alias)(i))
 }
 
+// HorizBrace is `\overbrace{...}` / `\underbrace{...}`.
+type HorizBrace struct {
+	Mode   Mode   `json:"mode"`
+	Label  string `json:"label"`
+	IsOver bool   `json:"isOver"`
+	Base   Node   `json:"base"`
+	Loc    Loc    `json:"loc,omitempty"`
+}
+
+func (h *HorizBrace) NodeType() string { return "horizBrace" }
+func (h *HorizBrace) NodeMode() Mode   { return h.Mode }
+func (h *HorizBrace) MarshalJSON() ([]byte, error) {
+	type alias HorizBrace
+	return withType("horizBrace", (*alias)(h))
+}
+
 // Verb is `\verb|...|`.
 type Verb struct {
 	Mode Mode   `json:"mode"`

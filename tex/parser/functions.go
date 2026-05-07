@@ -59,7 +59,83 @@ func functionDispatch(p *Parser, callerName, breakOnText string) (Node, error) {
 	if isAccentUnder(cmd) {
 		return parseAccentUnder(p)
 	}
+	if cmd == `\mathop` {
+		return parseMathOp(p)
+	}
+	if node, ok := parseOpFunction(p); ok {
+		return node, nil
+	}
+	if cmd == `\textcolor` || cmd == `\color` {
+		return parseColor(p)
+	}
+	if cmd == `\overbrace` || cmd == `\underbrace` {
+		return parseHorizBrace(p)
+	}
+	if cmd == `\not` {
+		// Common case: \not\command applies to the next symbol/operator.
+		// Without a macro expander we can't expand the upstream definition;
+		// emit a placeholder MClass node so downstream consumers see something.
+		return nil, nil
+	}
 	return nil, nil
+}
+
+// parseColor handles `\textcolor{name}{body}` and `\color{name}`.
+func parseColor(p *Parser) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	colorArg, err := parseFunctionArg(p, cmd)
+	if err != nil {
+		return nil, err
+	}
+	color := flattenSymbolText(colorArg)
+	if cmd == `\color` {
+		body, err := p.parseExpression(true, "")
+		if err != nil {
+			return nil, err
+		}
+		return &Color{Mode: p.mode, Color: color, Body: body}, nil
+	}
+	bodyArg, err := parseFunctionArg(p, cmd)
+	if err != nil {
+		return nil, err
+	}
+	body := OrdArgument(bodyArg)
+	return &Color{Mode: p.mode, Color: color, Body: body}, nil
+}
+
+// flattenSymbolText concatenates the text of a sequence of symbol nodes
+// inside an OrdGroup (used to read color names like "red" or "#fff").
+func flattenSymbolText(n Node) string {
+	if g, ok := n.(*OrdGroup); ok {
+		s := ""
+		for _, c := range g.Body {
+			if t, ok := SymbolText(c); ok {
+				s += t
+			}
+		}
+		return s
+	}
+	if t, ok := SymbolText(n); ok {
+		return t
+	}
+	return ""
+}
+
+// parseHorizBrace handles `\overbrace{...}` and `\underbrace{...}`.
+func parseHorizBrace(p *Parser) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	arg, err := parseFunctionArg(p, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return &HorizBrace{
+		Mode:   p.mode,
+		Label:  cmd,
+		IsOver: cmd == `\overbrace`,
+		Base:   arg,
+	}, nil
 }
 
 // parseFunctionArg consumes one mandatory argument: either `{...}` or a
