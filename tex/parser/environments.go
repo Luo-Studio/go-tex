@@ -260,7 +260,7 @@ func parseArrayBody(p *Parser, cellStyle StyleStr) ([][]Node, []*Measurement, er
 			return nil, nil, err
 		}
 		rows = append(rows, row)
-		if p.cur.Text == `\\` {
+		if p.cur.Text == `\\` || p.cur.Text == `\cr` {
 			p.advance()
 			rowGaps = append(rowGaps, nil)
 			continue

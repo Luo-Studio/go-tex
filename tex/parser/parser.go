@@ -125,6 +125,11 @@ func (p *Parser) parseExpression(breakOnInfix bool, breakOnText string) ([]Node,
 		if breakOnText != "" && p.cur.Text == breakOnText {
 			break
 		}
+		// `\\` and `\cr` are interchangeable row separators: when one is
+		// the requested break, the other also stops the expression.
+		if breakOnText == `\\` && p.cur.Text == `\cr` {
+			break
+		}
 		atom, err := p.parseAtom(breakOnText)
 		if err != nil {
 			return nil, err

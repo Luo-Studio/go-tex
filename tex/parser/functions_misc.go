@@ -463,6 +463,27 @@ func parseHBox(p *Parser) (Node, error) {
 }
 
 // =============================================================================
+// \html@mathml{html}{mathml}
+// =============================================================================
+
+func parseHtmlMathml(p *Parser) (Node, error) {
+	p.advance()
+	htmlArg, err := parseFunctionArg(p, `\html@mathml`)
+	if err != nil {
+		return nil, err
+	}
+	mathmlArg, err := parseFunctionArg(p, `\html@mathml`)
+	if err != nil {
+		return nil, err
+	}
+	return &HtmlMathMl{
+		Mode:   p.mode,
+		Html:   OrdArgument(htmlArg),
+		MathMl: OrdArgument(mathmlArg),
+	}, nil
+}
+
+// =============================================================================
 // Text-mode accents: \', \", \^, \~, \=, \., \u, \v, \H, \r, \c, \textcircled
 // =============================================================================
 

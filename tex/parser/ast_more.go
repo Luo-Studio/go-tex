@@ -697,6 +697,21 @@ func (n *NoNumber) MarshalJSON() ([]byte, error) {
 	return withType("nonumber", (*alias)(n))
 }
 
+// HtmlMathMl is the upstream `\html@mathml{html}{mathml}` two-branch node.
+type HtmlMathMl struct {
+	Mode   Mode   `json:"mode"`
+	Html   []Node `json:"html"`
+	MathMl []Node `json:"mathml"`
+	Loc    Loc    `json:"loc,omitempty"`
+}
+
+func (h *HtmlMathMl) NodeType() string { return "htmlmathml" }
+func (h *HtmlMathMl) NodeMode() Mode   { return h.Mode }
+func (h *HtmlMathMl) MarshalJSON() ([]byte, error) {
+	type alias HtmlMathMl
+	return withType("htmlmathml", (*alias)(h))
+}
+
 // CdArrow is one cell inside a `\begin{CD}` ... `\end{CD}` environment.
 type CdArrow struct {
 	Mode       Mode   `json:"mode"`

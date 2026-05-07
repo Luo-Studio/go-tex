@@ -122,6 +122,8 @@ func functionDispatch(p *Parser, callerName, breakOnText string) (Node, error) {
 		return parseVCenter(p)
 	case `\hbox`:
 		return parseHBox(p)
+	case `\html@mathml`:
+		return parseHtmlMathml(p)
 	case `\tiny`, `\sixptsize`, `\scriptsize`, `\footnotesize`, `\small`,
 		`\normalsize`, `\large`, `\Large`, `\LARGE`, `\huge`, `\Huge`:
 		return parseSizing(p, breakOnText)
