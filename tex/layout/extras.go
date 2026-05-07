@@ -227,14 +227,10 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 	if !ok {
 		return base
 	}
-	// Box width is at least 0.5em (matches upstream layout_accent's
-	// `base_w = body_box.width.max(0.5)`).
+	// Box width = base.Width (upstream layout_accent uses body_box.width
+	// for the box; the 0.5em floor only applies to internal SVG path
+	// computation).
 	width := base.Width
-	if width < 0.5 {
-		width = 0.5
-	}
-	// Skew of the base character — used to shift the accent centre by
-	// upstream's accent layout (handle_accent in engine.rs).
 	skew := baseSkew(a.Base, opts)
 	accentBox := &Box{
 		Width: cm.Width, Height: cm.Height, Depth: cm.Depth, Color: opts.Color,
