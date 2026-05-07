@@ -122,6 +122,9 @@ func functionDispatch(p *Parser, callerName, breakOnText string) (Node, error) {
 		return parseVCenter(p)
 	case `\hbox`:
 		return parseHBox(p)
+	case `\tiny`, `\sixptsize`, `\scriptsize`, `\footnotesize`, `\small`,
+		`\normalsize`, `\large`, `\Large`, `\LARGE`, `\huge`, `\Huge`:
+		return parseSizing(p, breakOnText)
 	}
 	if cmd == `\overbrace` || cmd == `\underbrace` {
 		return parseHorizBrace(p)
@@ -292,6 +295,33 @@ func parseSqrt(p *Parser) (Node, error) {
 // =============================================================================
 // Styling (\displaystyle, \textstyle, \scriptstyle, \scriptscriptstyle)
 // =============================================================================
+
+// =============================================================================
+// Sizing: \tiny, \scriptsize, \small, \normalsize, \large, \Large, \LARGE,
+// \huge, \Huge.
+// =============================================================================
+
+var sizeFuncs = []string{
+	`\tiny`, `\sixptsize`, `\scriptsize`, `\footnotesize`, `\small`,
+	`\normalsize`, `\large`, `\Large`, `\LARGE`, `\huge`, `\Huge`,
+}
+
+func parseSizing(p *Parser, breakOnText string) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	body, err := p.parseExpression(false, breakOnText)
+	if err != nil {
+		return nil, err
+	}
+	size := uint8(6)
+	for i, n := range sizeFuncs {
+		if n == cmd {
+			size = uint8(i + 1)
+			break
+		}
+	}
+	return &Sizing{Mode: p.mode, Size: size, Body: body}, nil
+}
 
 func parseStyling(p *Parser, breakOnText string) (Node, error) {
 	cmd := p.cur.Text

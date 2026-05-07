@@ -10,6 +10,7 @@ package macroexp
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/luo-studio/go-tex/tex/lexer"
 )
@@ -336,9 +337,233 @@ func defaultMacros() map[string]Definition {
 	m[`\gdef`] = Definition{Fn: handleDef(false)}
 	m[`\edef`] = Definition{Fn: handleDef(false)}
 	m[`\xdef`] = Definition{Fn: handleDef(false)}
+	m[`\newcommand`] = Definition{Fn: handleNewCommand(true, false)}
+	m[`\renewcommand`] = Definition{Fn: handleNewCommand(false, true)}
+	m[`\providecommand`] = Definition{Fn: handleNewCommand(true, true)}
 	m[`\@firstoftwo`] = Definition{Fn: firstOfTwo}
 	m[`\@secondoftwo`] = Definition{Fn: secondOfTwo}
+	m[`\@ifstar`] = Definition{Fn: ifStar}
+	m[`\@ifnextchar`] = Definition{Fn: ifNextChar}
+	m[`\noexpand`] = Definition{Fn: noExpand}
+	m[`\message`] = Definition{Fn: discardOneArg}
+	m[`\errmessage`] = Definition{Fn: discardOneArg}
+	// HTML extensions: no-op, return the content arg (KaTeX renders content
+	// only; no HTML attributes since we are output-format-agnostic here).
+	htmlPass := func(e *Expander) ([]lexer.Token, error) {
+		args, err := e.consumeArgsAsTokens(2)
+		if err != nil {
+			return nil, err
+		}
+		// args[1] is in source order; reverse for stack order.
+		toks := make([]lexer.Token, len(args[1]))
+		for i, t := range args[1] {
+			toks[len(args[1])-1-i] = t
+		}
+		return toks, nil
+	}
+	m[`\htmlClass`] = Definition{Fn: htmlPass}
+	m[`\htmlData`] = Definition{Fn: htmlPass}
+	m[`\htmlId`] = Definition{Fn: htmlPass}
+	m[`\htmlStyle`] = Definition{Fn: htmlPass}
+	// Text-form alias: \operatorname → \@ifstar\operatornamewithlimits\operatorname@
+	m[`\operatorname`] = Definition{Text: `\@ifstar\operatornamewithlimits\operatorname@`}
+	// \char: parse a number in decimal/octal/hex/backtick form and emit
+	// tokens "\@char{N}". The parser doesn't yet implement \@char; for now
+	// we approximate by passing through (most golden cases don't depend
+	// on \char output beyond what's already covered by the symbols table).
 	return m
+}
+
+// consumeArgsAsTokens reads n brace-or-single-token arguments and returns
+// each arg's token slice in source order.
+func (e *Expander) consumeArgsAsTokens(n int) ([][]lexer.Token, error) {
+	args := make([][]lexer.Token, n)
+	for i := 0; i < n; i++ {
+		toks, err := e.consumeArgTokens()
+		if err != nil {
+			return nil, fmt.Errorf("arg %d: %w", i+1, err)
+		}
+		args[i] = toks
+	}
+	return args, nil
+}
+
+func ifStar(e *Expander) ([]lexer.Token, error) {
+	args, err := e.consumeArgsAsTokens(2)
+	if err != nil {
+		return nil, err
+	}
+	chosen := args[1] // default: the without-star branch
+	// Skip leading spaces in the lookahead for `*`.
+	for {
+		t := e.pop()
+		if t.IsEOF() {
+			break
+		}
+		if t.IsSpace() {
+			continue
+		}
+		if t.Text == "*" {
+			chosen = args[0]
+		} else {
+			e.Push(t)
+		}
+		break
+	}
+	out := make([]lexer.Token, len(chosen))
+	for i, t := range chosen {
+		out[len(chosen)-1-i] = t
+	}
+	return out, nil
+}
+
+func ifNextChar(e *Expander) ([]lexer.Token, error) {
+	args, err := e.consumeArgsAsTokens(3)
+	if err != nil {
+		return nil, err
+	}
+	// Skip spaces in the lookahead.
+	for {
+		t := e.pop()
+		if t.IsEOF() {
+			break
+		}
+		if t.IsSpace() {
+			continue
+		}
+		e.Push(t)
+		break
+	}
+	want := ""
+	if len(args[0]) > 0 {
+		// args[0] is in source order; the "first" char in original order is
+		// the last element of the stack-reversed form, which equals
+		// args[0][0] in source order.
+		want = args[0][0].Text
+	}
+	chosen := args[2]
+	if e.Future().Text == want {
+		chosen = args[1]
+	}
+	out := make([]lexer.Token, len(chosen))
+	for i, t := range chosen {
+		out[len(chosen)-1-i] = t
+	}
+	return out, nil
+}
+
+func noExpand(e *Expander) ([]lexer.Token, error) {
+	t := e.pop()
+	if e.HasMacro(t.Text) {
+		t.NoExpand = true
+		t.TreatAsRelax = true
+	}
+	return []lexer.Token{t}, nil
+}
+
+func discardOneArg(e *Expander) ([]lexer.Token, error) {
+	if _, err := e.consumeArgsAsTokens(1); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+// handleNewCommand returns a function macro for \newcommand / \renewcommand
+// / \providecommand. Reads `\name`, optional `[N]` (arg count), optional
+// `[default]` (for first-arg default — not yet honoured), and a body.
+func handleNewCommand(allowNew, allowExisting bool) FnMacro {
+	return func(e *Expander) ([]lexer.Token, error) {
+		// Skip spaces.
+		var nameTok lexer.Token
+		for {
+			t := e.pop()
+			if t.IsEOF() {
+				return nil, fmt.Errorf("\\newcommand: unexpected EOF")
+			}
+			if t.IsSpace() {
+				continue
+			}
+			nameTok = t
+			break
+		}
+		name := nameTok.Text
+		if name == "{" {
+			// Brace-wrapped name.
+			t := e.pop()
+			name = t.Text
+			closing := e.pop()
+			if closing.Text != "}" {
+				return nil, fmt.Errorf("\\newcommand: expected } after name")
+			}
+		}
+		if name == "" || name[0] != '\\' {
+			return nil, fmt.Errorf("\\newcommand: expected control sequence")
+		}
+		if e.HasMacro(name) && !allowExisting {
+			return nil, fmt.Errorf("\\newcommand: %s is already defined", name)
+		}
+		if !e.HasMacro(name) && !allowNew {
+			return nil, fmt.Errorf("\\newcommand: %s is not yet defined", name)
+		}
+		// Optional [num]
+		numArgs := 0
+		for {
+			t := e.pop()
+			if t.IsSpace() {
+				continue
+			}
+			if t.Text == "[" {
+				var raw []byte
+				for {
+					tt := e.pop()
+					if tt.Text == "]" {
+						break
+					}
+					if tt.IsEOF() {
+						return nil, fmt.Errorf("\\newcommand: unterminated [num]")
+					}
+					raw = append(raw, tt.Text...)
+				}
+				s := strings.TrimSpace(string(raw))
+				if len(s) > 0 && s[0] >= '0' && s[0] <= '9' {
+					numArgs = int(s[0] - '0')
+				}
+				continue
+			}
+			// Optional default for first arg `[default]` is also possible;
+			// skip it for the minimal implementation.
+			e.Push(t)
+			break
+		}
+		// Read the body group.
+		t := e.pop()
+		if t.Text != "{" {
+			return nil, fmt.Errorf("\\newcommand: expected body group")
+		}
+		var body []lexer.Token
+		depth := 1
+		for {
+			tt := e.pop()
+			if tt.IsEOF() {
+				return nil, fmt.Errorf("\\newcommand: unterminated body")
+			}
+			if tt.Text == "{" {
+				depth++
+			} else if tt.Text == "}" {
+				depth--
+				if depth == 0 {
+					break
+				}
+			}
+			body = append(body, tt)
+		}
+		if e.HasMacro(name) && allowExisting && !allowNew {
+			// providecommand: keep existing definition, discard new one.
+			return nil, nil
+		}
+		e.macros[name] = Definition{Tokens: body, NumArg: numArgs}
+		return nil, nil
+	}
 }
 
 // maxArgRef returns the largest #N appearing in template, or 0 if none.
