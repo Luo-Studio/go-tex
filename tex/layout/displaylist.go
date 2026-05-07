@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"github.com/luo-studio/go-tex/tex/fontmetrics"
 	"github.com/luo-studio/go-tex/tex/path"
 )
 
@@ -66,7 +67,209 @@ type PathItem struct {
 func ToDisplayList(b *Box) DisplayList {
 	dl := DisplayList{Width: b.Width, Height: b.Height, Depth: b.Depth}
 	emit(b, &dl, 0, 0, 1.0)
+	expandVisualBounds(&dl)
 	return dl
+}
+
+// expandVisualBounds mirrors upstream to_display.rs: when display items
+// extend outside the nominal box (e.g. accent ring wider than base, smash
+// zeroing height/depth, mathllap zero width), shift items right/down and
+// grow width/depth so the rasterizer's pixmap covers the ink.
+func expandVisualBounds(dl *DisplayList) {
+	if len(dl.Items) == 0 {
+		return
+	}
+	minX, maxX, minY, maxY := computeVisualBounds(dl.Items)
+	totalH := dl.Height + dl.Depth
+
+	// Vertical: when nominal total height is near-zero (\smash), grow.
+	if totalH < 0.01 {
+		if minY < -0.001 {
+			extra := -minY
+			dl.Height += extra
+			for i := range dl.Items {
+				shiftItemY(&dl.Items[i], extra)
+			}
+		}
+		nominalBottom := dl.Height + dl.Depth
+		shiftedMaxY := maxY
+		if minY < -0.001 {
+			shiftedMaxY = maxY - minY
+		}
+		if shiftedMaxY > nominalBottom+0.001 {
+			dl.Depth = shiftedMaxY - dl.Height
+		}
+	}
+
+	// Horizontal: zero-width box (mathllap) gets full expansion; otherwise
+	// shift+grow when ink extends left of nominal x=0.
+	if dl.Width < 0.01 {
+		if minX < -0.001 {
+			extra := -minX
+			dl.Width += extra
+			for i := range dl.Items {
+				shiftItemX(&dl.Items[i], extra)
+			}
+		}
+		shiftedMaxX := maxX
+		if minX < -0.001 {
+			shiftedMaxX = maxX - minX
+		}
+		if shiftedMaxX > dl.Width+0.001 {
+			dl.Width = shiftedMaxX
+		}
+	} else if minX < -0.001 {
+		extra := -minX
+		w := dl.Width + extra
+		if maxX+extra > w {
+			w = maxX + extra
+		}
+		dl.Width = w
+		for i := range dl.Items {
+			shiftItemX(&dl.Items[i], extra)
+		}
+	}
+
+	// Vertical (full): when total_h >= 0.01 and ink extends above y=0,
+	// shift down and grow depth as needed.
+	if totalH >= 0.01 && minY < -0.001 {
+		extra := -minY
+		dl.Height += extra
+		for i := range dl.Items {
+			shiftItemY(&dl.Items[i], extra)
+		}
+		newBottom := dl.Height + dl.Depth
+		adjustedMaxY := maxY + extra
+		if adjustedMaxY > newBottom+0.001 {
+			dl.Depth = adjustedMaxY - dl.Height
+		}
+	}
+
+	// Expand depth when ink extends below nominal bottom.
+	if totalH >= 0.01 && minY >= -0.001 && maxY > dl.Height+dl.Depth+0.001 {
+		dl.Depth = maxY - dl.Height
+	}
+}
+
+func computeVisualBounds(items []DisplayItem) (minX, maxX, minY, maxY float64) {
+	minX, minY = 1e18, 1e18
+	maxX, maxY = -1e18, -1e18
+	for _, it := range items {
+		switch v := it.(type) {
+		case GlyphPath:
+			cm, ok := fontmetrics.LookupWithFallback(v.Font, v.CharCode)
+			w, h, d := 0.0, 0.0, 0.0
+			if ok {
+				w, h, d = cm.Width, cm.Height, cm.Depth
+			}
+			if v.X < minX {
+				minX = v.X
+			}
+			if v.X+w*v.Scale > maxX {
+				maxX = v.X + w*v.Scale
+			}
+			if v.Y-h*v.Scale < minY {
+				minY = v.Y - h*v.Scale
+			}
+			if v.Y+d*v.Scale > maxY {
+				maxY = v.Y + d*v.Scale
+			}
+		case Line:
+			if v.X < minX {
+				minX = v.X
+			}
+			if v.X+v.Width > maxX {
+				maxX = v.X + v.Width
+			}
+			if v.Y-v.Thickness/2 < minY {
+				minY = v.Y - v.Thickness/2
+			}
+			if v.Y+v.Thickness/2 > maxY {
+				maxY = v.Y + v.Thickness/2
+			}
+		case Rect:
+			if v.X < minX {
+				minX = v.X
+			}
+			if v.X+v.Width > maxX {
+				maxX = v.X + v.Width
+			}
+			if v.Y < minY {
+				minY = v.Y
+			}
+			if v.Y+v.Height > maxY {
+				maxY = v.Y + v.Height
+			}
+		case PathItem:
+			const maxEm = 50.0
+			consider := func(cx, cy float64) {
+				if cx < -maxEm || cx > maxEm || cy < -maxEm || cy > maxEm {
+					return
+				}
+				ax, ay := v.X+cx, v.Y+cy
+				if ax < minX {
+					minX = ax
+				}
+				if ax > maxX {
+					maxX = ax
+				}
+				if ay < minY {
+					minY = ay
+				}
+				if ay > maxY {
+					maxY = ay
+				}
+			}
+			for _, cmd := range v.Commands {
+				switch cmd.Kind {
+				case path.KindMoveTo, path.KindLineTo:
+					consider(cmd.X, cmd.Y)
+				case path.KindCubicTo:
+					consider(cmd.X1, cmd.Y1)
+					consider(cmd.X2, cmd.Y2)
+					consider(cmd.X, cmd.Y)
+				case path.KindQuadTo:
+					consider(cmd.X1, cmd.Y1)
+					consider(cmd.X, cmd.Y)
+				}
+			}
+		}
+	}
+	return
+}
+
+func shiftItemX(it *DisplayItem, dx float64) {
+	switch v := (*it).(type) {
+	case GlyphPath:
+		v.X += dx
+		*it = v
+	case Line:
+		v.X += dx
+		*it = v
+	case Rect:
+		v.X += dx
+		*it = v
+	case PathItem:
+		v.X += dx
+		*it = v
+	}
+}
+
+func shiftItemY(it *DisplayItem, dy float64) {
+	switch v := (*it).(type) {
+	case GlyphPath:
+		v.Y += dy
+		*it = v
+	case Line:
+		v.Y += dy
+		*it = v
+	case Rect:
+		v.Y += dy
+		*it = v
+	case PathItem:
+		v.Y += dy
+		*it = v
+	}
 }
 
 // emit recursively walks b, appending DisplayItems with absolute positions.
