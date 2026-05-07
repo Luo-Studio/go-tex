@@ -335,16 +335,35 @@ func layoutSupSubNode(base, sup, sub parser.Node, opts Options) *Box {
 	}
 }
 
+// getBaseElem peels OrdGroup (single child), Color (single body), and
+// Font wrappers to reach the underlying glyph node. Mirrors upstream
+// get_base_elem.
+func getBaseElem(n parser.Node) parser.Node {
+	switch v := n.(type) {
+	case *parser.OrdGroup:
+		if len(v.Body) == 1 {
+			return getBaseElem(v.Body[0])
+		}
+	case *parser.Color:
+		if len(v.Body) == 1 {
+			return getBaseElem(v.Body[0])
+		}
+	case *parser.Font:
+		return getBaseElem(v.Body)
+	}
+	return n
+}
+
 // isCharacterBox reports whether node is "character-like" — used by
 // supsub to decide whether to consume sup_drop / sub_drop. Matches the
-// upstream is_character_box helper.
+// upstream is_character_box helper (peels Font/Color/single-OrdGroup
+// wrappers via getBaseElem).
 func isCharacterBox(n parser.Node) bool {
 	if n == nil {
 		return false
 	}
-	switch n.(type) {
-	case *parser.MathOrd, *parser.TextOrd, *parser.Atom,
-		*parser.OpToken, *parser.AccentToken, *parser.Spacing:
+	switch getBaseElem(n).(type) {
+	case *parser.MathOrd, *parser.TextOrd, *parser.Atom, *parser.AccentToken:
 		return true
 	}
 	return false
