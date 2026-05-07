@@ -93,18 +93,45 @@ func nodeMathClass(n parser.Node) (MathClass, bool) {
 			return ClassOp, true
 		}
 		return ClassOrd, true
+	case *parser.HtmlMathMl:
+		// Derive class from the first meaningful child in the html branch.
+		for _, child := range v.Html {
+			if c, ok := nodeMathClass(child); ok {
+				return c, true
+			}
+		}
+		return ClassOrd, true
+	case *parser.SupSub:
+		if v.Base != nil {
+			if c, ok := nodeMathClass(v.Base); ok {
+				return c, true
+			}
+		}
+		return ClassOrd, true
+	case *parser.XArrow:
+		return ClassRel, true
+	case *parser.GenFrac:
+		// With delimiters (\binom etc.) → Ord; without → Inner.
+		hasL := v.LeftDelim != nil && *v.LeftDelim != "" && *v.LeftDelim != "."
+		hasR := v.RightDelim != nil && *v.RightDelim != "" && *v.RightDelim != "."
+		if hasL || hasR {
+			return ClassOrd, true
+		}
+		return ClassInner, true
+	case *parser.Lap:
+		return 0, false
 	case *parser.MathOrd, *parser.TextOrd, *parser.AccentToken,
-		*parser.OrdGroup, *parser.SupSub, *parser.GenFrac, *parser.Sqrt,
+		*parser.OrdGroup, *parser.Sqrt,
 		*parser.Accent, *parser.AccentUnder, *parser.Font, *parser.Color,
 		*parser.Phantom, *parser.VPhantom, *parser.Smash, *parser.Overline,
-		*parser.Underline, *parser.Rule, *parser.Lap, *parser.RaiseBox,
-		*parser.HBox, *parser.MathChoice, *parser.HtmlMathMl,
+		*parser.Underline, *parser.Rule, *parser.RaiseBox,
+		*parser.HBox, *parser.MathChoice,
 		*parser.Enclose, *parser.Pmb, *parser.Href, *parser.URL,
 		*parser.HorizBrace, *parser.VCenter:
 		return ClassOrd, true
 	case *parser.OpToken, *parser.Op, *parser.OperatorName:
 		return ClassOp, true
-	case *parser.LeftRight, *parser.XArrow:
+	case *parser.LeftRight:
 		return ClassInner, true
 	case *parser.DelimSizing:
 		switch v.Mclass {
