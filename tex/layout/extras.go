@@ -307,10 +307,128 @@ func layoutSqrt(s *parser.Sqrt, opts Options) *Box {
 	}
 }
 
-// layoutLeftRight is a placeholder: just lay out the inner body. Real
-// layout grows the left/right delimiters to the inner height.
+// layoutLeftRight: lay out the inner, then pick stretchy delimiters
+// from the Size1-Size4 family to wrap it. Mirrors upstream's
+// layout_left_right + make_stretchy_delim.
 func layoutLeftRight(lr *parser.LeftRight, opts Options) *Box {
-	return layoutExpression(lr.Body, opts, true)
+	inner := layoutExpression(lr.Body, opts, true)
+	totalH := leftRightDelimTotalHeight(inner, opts)
+	left := makeStretchyDelim(lr.Left, totalH, opts)
+	right := makeStretchyDelim(lr.Right, totalH, opts)
+	w := left.Width + inner.Width + right.Width
+	h := max64(max64(left.Height, right.Height), inner.Height)
+	d := max64(max64(left.Depth, right.Depth), inner.Depth)
+	return &Box{
+		Width: w, Height: h, Depth: d, Color: opts.Color,
+		Content: LeftRight{Left: left, Inner: inner, Right: right},
+	}
+}
+
+func leftRightDelimTotalHeight(inner *Box, opts Options) float64 {
+	m := opts.Metrics()
+	axis := m.AxisHeight
+	maxDist := inner.Height - axis
+	if inner.Depth+axis > maxDist {
+		maxDist = inner.Depth + axis
+	}
+	delimFactor := 901.0
+	delimExtend := 5.0 / m.PtPerEm
+	fromFormula := maxDist / 500 * delimFactor
+	if 2*maxDist-delimExtend > fromFormula {
+		fromFormula = 2*maxDist - delimExtend
+	}
+	if inner.Height+inner.Depth > fromFormula {
+		return inner.Height + inner.Depth
+	}
+	return fromFormula
+}
+
+var delimFontSequence = []string{
+	fontmetrics.FontMainRegular,
+	fontmetrics.FontSize1Regular,
+	fontmetrics.FontSize2Regular,
+	fontmetrics.FontSize3Regular,
+	fontmetrics.FontSize4Regular,
+}
+
+// delimChar maps a left/right delimiter spelling to its glyph codepoint.
+func delimChar(delim string) (rune, bool) {
+	switch delim {
+	case "(":
+		return '(', true
+	case ")":
+		return ')', true
+	case "[", `\lbrack`:
+		return '[', true
+	case "]", `\rbrack`:
+		return ']', true
+	case `\{`, `\lbrace`:
+		return '{', true
+	case `\}`, `\rbrace`:
+		return '}', true
+	case "/":
+		return '/', true
+	case `\backslash`:
+		return '\\', true
+	case "|", `\vert`, `\lvert`, `\rvert`:
+		return '|', true
+	case `\|`, `\Vert`, `\lVert`, `\rVert`:
+		return 0x2225, true // ‖
+	case `\langle`, "<", `\lt`:
+		return 0x27E8, true // ⟨
+	case `\rangle`, ">", `\gt`:
+		return 0x27E9, true
+	case `\lfloor`:
+		return 0x230A, true
+	case `\rfloor`:
+		return 0x230B, true
+	case `\lceil`:
+		return 0x2308, true
+	case `\rceil`:
+		return 0x2309, true
+	case `\uparrow`:
+		return 0x2191, true
+	case `\downarrow`:
+		return 0x2193, true
+	case `\updownarrow`:
+		return 0x2195, true
+	case `\Uparrow`:
+		return 0x21D1, true
+	case `\Downarrow`:
+		return 0x21D3, true
+	case `\Updownarrow`:
+		return 0x21D5, true
+	case ".", "":
+		return 0, false
+	}
+	return 0, false
+}
+
+func makeStretchyDelim(delim string, totalH float64, opts Options) *Box {
+	if delim == "." || delim == "" {
+		return NewKern(0)
+	}
+	cp, ok := delimChar(delim)
+	if !ok {
+		return NewKern(0)
+	}
+	bestFont := fontmetrics.FontMainRegular
+	bestW, bestH, bestD := 0.4, 0.7, 0.2
+	for _, font := range delimFontSequence {
+		if cm, ok := fontmetrics.Lookup(font, cp); ok {
+			bestFont = font
+			bestW = cm.Width
+			bestH = cm.Height
+			bestD = cm.Depth
+			if bestH+bestD >= totalH {
+				break
+			}
+		}
+	}
+	return &Box{
+		Width: bestW, Height: bestH, Depth: bestD, Color: opts.Color,
+		Content: Glyph{FontID: bestFont, CharCode: cp},
+	}
 }
 
 func layoutOverline(o *parser.Overline, opts Options) *Box {

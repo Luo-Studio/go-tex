@@ -158,7 +158,16 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 			Width: b.Width * scale, Thickness: c.RuleThickness * scale, Color: b.Color,
 		})
 	case LeftRight:
-		emit(c.Inner, dl, x, y, scale)
+		// left, inner, right concatenated horizontally. The delimiters'
+		// own y-extent already centres them on the math axis when their
+		// h+d > inner h+d; for matching upstream baseline we put each
+		// child at top y + (b.Height - child.Height)*scale.
+		cx := x
+		emit(c.Left, dl, cx, y+(b.Height-c.Left.Height)*scale, scale)
+		cx += c.Left.Width * scale
+		emit(c.Inner, dl, cx, y+(b.Height-c.Inner.Height)*scale, scale)
+		cx += c.Inner.Width * scale
+		emit(c.Right, dl, cx, y+(b.Height-c.Right.Height)*scale, scale)
 	case Accent:
 		baseTop := y + (b.Height-c.Base.Height)*scale
 		emit(c.Base, dl, x, baseTop, scale)
