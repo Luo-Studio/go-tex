@@ -265,6 +265,9 @@ var accentChar = map[string]rune{
 // layoutAccent stacks a math accent glyph above the base.
 func layoutAccent(a *parser.Accent, opts Options) *Box {
 	base := layoutNode(a.Base, opts.WithStyle(opts.Style.Cramped()))
+	if a.Label == `\textcircled` {
+		return layoutTextcircled(base, opts)
+	}
 	cp, ok := accentChar[a.Label]
 	if !ok {
 		return base
@@ -618,6 +621,55 @@ func makeStretchyDelim(delim string, totalH float64, opts Options) *Box {
 	return &Box{
 		Width: bestW, Height: bestH, Depth: bestD, Color: opts.Color,
 		Content: Glyph{FontID: bestFont, CharCode: cp},
+	}
+}
+
+// layoutTextcircled draws a circle around the body. Mirrors upstream
+// layout_textcircled. Used by \copyright (= \textcircled{c} via macro).
+func layoutTextcircled(body *Box, opts Options) *Box {
+	pad := 0.1
+	totalH := body.Height + body.Depth
+	r := body.Width
+	if totalH > r {
+		r = totalH
+	}
+	r = r/2 + pad
+	if r < 0.35 {
+		r = 0.35
+	}
+	diameter := 2 * r
+	cx := r
+	cy := -(body.Height - totalH/2)
+	const k = 0.5523
+	cmds := []path.Command{
+		path.MoveTo(cx+r, cy),
+		path.CubicTo(cx+r, cy-k*r, cx+k*r, cy-r, cx, cy-r),
+		path.CubicTo(cx-k*r, cy-r, cx-r, cy-k*r, cx-r, cy),
+		path.CubicTo(cx-r, cy+k*r, cx-k*r, cy+r, cx, cy+r),
+		path.CubicTo(cx+k*r, cy+r, cx+r, cy+k*r, cx+r, cy),
+		{Kind: path.KindClose},
+	}
+	circleH := r
+	if cy < 0 {
+		circleH -= cy
+	}
+	circleD := r + cy
+	if circleD < 0 {
+		circleD = 0
+	}
+	circleBox := &Box{
+		Width: diameter, Height: circleH, Depth: circleD, Color: opts.Color,
+		Content: SvgPath{Commands: cmds, Fill: false},
+	}
+	contentShift := (diameter - body.Width) / 2
+	children := []*Box{
+		circleBox,
+		NewKern(-diameter + contentShift),
+		body,
+	}
+	return &Box{
+		Width: diameter, Height: circleH, Depth: circleD, Color: opts.Color,
+		Content: HBox{Children: children},
 	}
 }
 
