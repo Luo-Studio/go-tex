@@ -77,9 +77,16 @@ func layoutNode(n parser.Node, opts Options) *Box {
 			barThickness = 0
 		}
 		if v.BarSize != nil {
-			barThickness = v.BarSize.Number // TODO: unit conversion
+			barThickness = v.BarSize.Number
 		}
-		return layoutFraction(v.Numer, v.Denom, barThickness, v.Continued, opts)
+		frac := layoutFraction(v.Numer, v.Denom, barThickness, v.Continued, opts)
+		// KaTeX wraps every \\frac/\\atop in mopen+mclose nulldelimiter spans
+		// of \\nulldelimiterspace each side (1.2pt = 0.12em).
+		if v.LeftDelim == nil && v.RightDelim == nil {
+			pad := 0.12
+			frac = makeHBox([]*Box{NewKern(pad), frac, NewKern(pad)}, opts.Color)
+		}
+		return frac
 	case *parser.SupSub:
 		return layoutSupSubNode(v.Base, v.Sup, v.Sub, opts)
 	case *parser.Color:
