@@ -22,15 +22,14 @@ func layoutTextBody(nodes []parser.Node, opts Options) *Box {
 		case *parser.Atom:
 			children = append(children, layoutSymbol(v.Text, parser.ModeText, textOpts))
 		case *parser.Spacing:
-			// Use the symbols-table spacing entry (\nobreakspace gives
-			// width=0.25em in Main-Regular, etc.). Unknown spacing names
-			// produce an empty box.
+			// Spacing in text mode: emit a kern (no glyph) — upstream's
+			// SVG output drops the <text> element for whitespace.
 			cm, ok := fontmetrics.LookupWithFallback(fontmetrics.FontMainRegular, ' ')
 			if !ok {
 				children = append(children, NewEmpty())
 				continue
 			}
-			children = append(children, &Box{Width: cm.Width, Height: cm.Height, Depth: cm.Depth, Color: opts.Color, Content: Glyph{FontID: fontmetrics.FontMainRegular, CharCode: ' '}})
+			children = append(children, NewKern(cm.Width))
 		default:
 			children = append(children, layoutNode(n, textOpts))
 		}
