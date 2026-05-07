@@ -9,19 +9,32 @@ import (
 
 // layoutTextBody lays out the body of a `\text{...}` node as a horizontal
 // concatenation of glyph boxes in text mode (no atom-class glue).
+//
+// If opts.InterGlyphKernEm > 0, inserts a kern between adjacent glyph
+// children (matches upstream layout_with_font's tracking adjustment for
+// \href / \url monospace alignment).
 func layoutTextBody(nodes []parser.Node, opts Options) *Box {
 	if len(nodes) == 0 {
 		return NewEmpty()
 	}
 	textOpts := opts
 	children := make([]*Box, 0, len(nodes))
+	kern := opts.InterGlyphKernEm
+	addKern := func() {
+		if kern > 0 && len(children) > 0 {
+			children = append(children, NewKern(kern))
+		}
+	}
 	for _, n := range nodes {
 		switch v := n.(type) {
 		case *parser.MathOrd:
+			addKern()
 			children = append(children, layoutSymbol(v.Text, parser.ModeText, textOpts))
 		case *parser.TextOrd:
+			addKern()
 			children = append(children, layoutSymbol(v.Text, parser.ModeText, textOpts))
 		case *parser.Atom:
+			addKern()
 			children = append(children, layoutSymbol(v.Text, parser.ModeText, textOpts))
 		case *parser.Spacing:
 			// Spacing in text mode: emit a kern (no glyph) — upstream's
@@ -530,6 +543,26 @@ func layoutUnderline(o *parser.Underline, opts Options) *Box {
 	rt := opts.Metrics().DefaultRuleThickness
 	return &Box{Width: body.Width, Height: body.Height, Depth: body.Depth + 3*rt, Color: opts.Color,
 		Content: Underline{Body: body, RuleThickness: rt}}
+}
+
+// layoutHref handles \href{url}{body} and \url{addr}: render body in
+// blue with slight tracking, wrapped in an underline.
+func layoutHref(body []parser.Node, opts Options) *Box {
+	linkColor := Color{0, 0, 255, 255}
+	bodyOpts := opts.WithColor(linkColor)
+	bodyOpts.InterGlyphKernEm = 0.024
+	inner := layoutExpression(body, bodyOpts, true)
+	rt := opts.Metrics().DefaultRuleThickness
+	return &Box{
+		Width:  inner.Width,
+		Height: inner.Height,
+		Depth:  inner.Depth + 3*rt,
+		Color:  linkColor,
+		Content: Underline{
+			Body:          inner,
+			RuleThickness: rt,
+		},
+	}
 }
 
 // genfracDelimHeight returns the target stretchy delim height for

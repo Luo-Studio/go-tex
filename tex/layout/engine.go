@@ -175,9 +175,16 @@ func layoutNode(n parser.Node, opts Options) *Box {
 		return layoutExpression(v.Body, opts, true)
 	case *parser.Text:
 		// Text mode: lay out each child glyph using Main-Regular (or the
-		// font implied by v.Font). Spacing inside text is plain
-		// horizontal concatenation without atom-class glue.
-		return layoutTextBody(v.Body, opts)
+		// font implied by v.Font, e.g. \texttt → KaTeX_Typewriter).
+		// Spacing inside text is plain horizontal concatenation without
+		// atom-class glue.
+		textOpts := opts
+		if v.Font != nil {
+			if fid := mathFontToKaTeX(*v.Font); fid != "" {
+				textOpts.FontOverride = fid
+			}
+		}
+		return layoutTextBody(v.Body, textOpts)
 	case *parser.Kern:
 		// Kern boxes have width but no height/depth. Unit conversion
 		// from the parsed measurement; mu uses the current quad.
@@ -267,10 +274,37 @@ func layoutNode(n parser.Node, opts Options) *Box {
 		return layoutDelimSizing(v, opts)
 	case *parser.Sizing:
 		return layoutSizing(v, opts)
+	case *parser.Href:
+		return layoutHref(v.Body, opts)
+	case *parser.URL:
+		// \url{addr}: render the URL in typewriter as a blue underlined
+		// link. Each char becomes a Typewriter glyph at native width.
+		linkColor := Color{0, 0, 255, 255}
+		ttOpts := opts.WithColor(linkColor)
+		ttOpts.FontOverride = "Typewriter-Regular"
+		var children []*Box
+		for _, r := range v.URL {
+			cm, ok := fontmetrics.LookupWithFallback("Typewriter-Regular", r)
+			if !ok {
+				continue
+			}
+			children = append(children, &Box{
+				Width: cm.Width, Height: cm.Height, Depth: cm.Depth,
+				Color: linkColor,
+				Content: Glyph{FontID: "Typewriter-Regular", CharCode: r},
+			})
+		}
+		inner := makeHBox(children, linkColor)
+		rt := opts.Metrics().DefaultRuleThickness
+		return &Box{
+			Width: inner.Width, Height: inner.Height, Depth: inner.Depth + 3*rt,
+			Color: linkColor,
+			Content: Underline{Body: inner, RuleThickness: rt},
+		}
 	case *parser.Cr, *parser.Infix, *parser.Middle,
 		*parser.LeftRightRight,
 		*parser.XArrow, *parser.Lap, *parser.VCenter, *parser.Tag,
-		*parser.Pmb, *parser.Href, *parser.URL:
+		*parser.Pmb:
 		// TODO: full layout for these; for now just lay out subtrees we
 		// know how to handle, otherwise empty.
 		return NewEmpty()
@@ -360,26 +394,28 @@ func isASCIILetter(r rune) bool {
 // unknown names.
 func mathFontToKaTeX(font string) string {
 	switch font {
-	case "mathrm":
+	case "mathrm", "\\mathrm", "textrm", "\\textrm", "rm", "\\rm":
 		return "Main-Regular"
-	case "mathbf":
+	case "mathbf", "\\mathbf", "textbf", "\\textbf", "bf", "\\bf":
 		return "Main-Bold"
-	case "mathit":
+	case "mathit", "\\mathit", "textit", "\\textit", "\\emph":
 		return "Main-Italic"
 	case "mathnormal":
 		return "Math-Italic"
-	case "mathsf":
+	case "mathsf", "\\mathsf", "textsf", "\\textsf":
 		return "SansSerif-Regular"
-	case "mathtt":
+	case "mathtt", "\\mathtt", "texttt", "\\texttt":
 		return "Typewriter-Regular"
-	case "mathfrak":
+	case "mathfrak", "\\mathfrak", "frak", "\\frak":
 		return "Fraktur-Regular"
-	case "mathcal":
+	case "mathcal", "\\mathcal", "cal", "\\cal":
 		return "Caligraphic-Regular"
-	case "mathbb":
+	case "mathbb", "\\mathbb":
 		return "AMS-Regular"
-	case "mathscr":
+	case "mathscr", "\\mathscr":
 		return "Script-Regular"
+	case "boldsymbol", "\\boldsymbol", "bm", "\\bm":
+		return "Math-BoldItalic"
 	}
 	return ""
 }
