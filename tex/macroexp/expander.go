@@ -308,6 +308,22 @@ func (e *Expander) HasMacro(name string) bool {
 	return ok
 }
 
+// lexBodySource lexes a macro body in source order (NOT stack order). Used
+// at registration time when the body's tokens are spliced via #N substitution
+// — the per-call `expandTokens` reverses to stack order at the end.
+func lexBodySource(text string) []lexer.Token {
+	l := lexer.New(text)
+	var toks []lexer.Token
+	for {
+		t := l.Lex()
+		if t.IsEOF() {
+			break
+		}
+		toks = append(toks, t)
+	}
+	return toks
+}
+
 // lexAll lexes text and returns its tokens in stack order (i.e. reversed).
 func lexAll(text string) []lexer.Token {
 	l := lexer.New(text)
@@ -329,7 +345,15 @@ func lexAll(text string) []lexer.Token {
 func defaultMacros() map[string]Definition {
 	m := make(map[string]Definition, len(builtinTextMacros)+8)
 	for k, v := range builtinTextMacros {
-		m[k] = Definition{Text: v, NumArg: maxArgRef(v)}
+		n := maxArgRef(v)
+		if n > 0 {
+			// Pre-lex arg-using builtins so #N substitution happens at the
+			// token level rather than via text join (which would lose
+			// whitespace between `\rm` and `mod`, etc.).
+			m[k] = Definition{Tokens: lexBodySource(v), NumArg: n}
+			continue
+		}
+		m[k] = Definition{Text: v}
 	}
 	// Function-based macros.
 	m[`\TextOrMath`] = Definition{Fn: textOrMath}
