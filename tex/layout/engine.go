@@ -324,6 +324,17 @@ func layoutSymbol(text string, mode parser.Mode, opts Options) *Box {
 		font = selectFont(text, resolved, mode)
 	}
 	cm, ok := fontmetrics.LookupWithFallback(font, resolved)
+	if !ok && opts.FontOverride != "" {
+		// Glyph missing from the requested override font (e.g. digits in
+		// Caligraphic-Regular) — fall back to the default font selection
+		// rather than forcing Math-Italic. Mirrors upstream
+		// layout_with_font's `_ => layout_node` fallthrough.
+		font = selectFont(text, resolved, mode)
+		if cm2, ok2 := fontmetrics.LookupWithFallback(font, resolved); ok2 {
+			cm = cm2
+			ok = true
+		}
+	}
 	if !ok && mode == parser.ModeMath && font != fontmetrics.FontMathItalic {
 		// Upstream second-chance lookup in Math-Italic for math-mode
 		// glyphs missing from the resolved font.
