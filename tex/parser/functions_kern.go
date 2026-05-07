@@ -17,10 +17,37 @@ func parseKern(p *Parser) (Node, error) {
 		return nil, err
 	}
 	if dim == nil {
-		// Failed to parse — fall back to 0em like upstream.
 		dim = &Measurement{Number: 0, Unit: "em"}
 	}
 	return &Kern{Mode: p.mode, Dimension: *dim}, nil
+}
+
+// parseHSpace handles \hspace{size} and \hfill (which produces a special
+// fill kern). Both emit Kern nodes.
+func parseHSpace(p *Parser) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	if cmd == `\hfill` {
+		// \hfill is treated as a SpacingNode in upstream's spacing.rs.
+		return &Spacing{Mode: p.mode, Text: cmd}, nil
+	}
+	dim, err := parseSizeGroup(p, cmd)
+	if err != nil {
+		return nil, err
+	}
+	if dim == nil {
+		dim = &Measurement{Number: 0, Unit: "em"}
+	}
+	return &Kern{Mode: p.mode, Dimension: *dim}, nil
+}
+
+// parseSpacingNode handles plain spacing commands that emit a SpacingNode
+// (\quad, \qquad, etc.) plus a few control-sequence names that the upstream
+// passes through as SpacingNode (\space, \nobreakspace).
+func parseSpacingNode(p *Parser) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	return &Spacing{Mode: p.mode, Text: cmd}, nil
 }
 
 // parseSizeGroup reads a size argument in either of two forms:

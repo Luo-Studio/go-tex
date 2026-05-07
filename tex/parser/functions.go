@@ -124,6 +124,14 @@ func functionDispatch(p *Parser, callerName, breakOnText string) (Node, error) {
 		return parseHBox(p)
 	case `\html@mathml`:
 		return parseHtmlMathml(p)
+	case `\relax`:
+		return &Internal{Mode: p.mode}, p.advanceAndReturn()
+	case `\hspace`, `\hfill`:
+		return parseHSpace(p)
+	case `\quad`, `\qquad`, `\enspace`, `\thinspace`, `\medspace`,
+		`\thickspace`, `\negthinspace`, `\negmedspace`, `\negthickspace`,
+		`\nobreakspace`, `\space`, `\allowbreak`, `\nobreak`, `\@`:
+		return parseSpacingNode(p)
 	case `\tiny`, `\sixptsize`, `\scriptsize`, `\footnotesize`, `\small`,
 		`\normalsize`, `\large`, `\Large`, `\LARGE`, `\huge`, `\Huge`:
 		return parseSizing(p, breakOnText)

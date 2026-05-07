@@ -130,11 +130,14 @@ func parseRaiseBox(p *Parser) (Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := parseFunctionArg(p, cmd)
+	// Body is parsed in text mode and wrapped in Styling text — matches
+	// upstream's ArgType::HBox + Styling{text} wrap.
+	body, err := parseTextModeArg(p, cmd)
 	if err != nil {
 		return nil, err
 	}
-	return &RaiseBox{Mode: p.mode, Dy: *dy, Body: body}, nil
+	styled := &Styling{Mode: ModeText, Style: StyleText, Body: []Node{body}}
+	return &RaiseBox{Mode: p.mode, Dy: *dy, Body: styled}, nil
 }
 
 // =============================================================================

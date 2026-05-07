@@ -393,7 +393,6 @@ func handleCasesEnv(p *Parser, name string) (Node, error) {
 }
 
 func handleArrayEnv(p *Parser, fullName, base string) (Node, error) {
-	// Read the column spec argument.
 	p.consumeSpaces()
 	if p.cur.Text != "{" {
 		return nil, errAt(fmt.Sprintf("Expected column spec after \\begin{%s}", fullName), p.cur)
@@ -418,14 +417,33 @@ func handleArrayEnv(p *Parser, fullName, base string) (Node, error) {
 		return nil, err
 	}
 	return &Array{
-		Mode:            p.mode,
-		Body:            rows,
-		RowGaps:         rowGaps,
-		HLinesBeforeRow: buildEmptyHLines(len(rows)),
-		Cols:            cols,
+		Mode:              p.mode,
+		Body:              rows,
+		RowGaps:           rowGaps,
+		HLinesBeforeRow:   buildEmptyHLines(len(rows)),
+		Cols:              cols,
 		HskipBeforeAndAft: boolPtr(true),
-		ArrayStretch:    1.0,
+		ArrayStretch:      arrayStretchFromMacro(p, 1.0),
 	}, nil
+}
+
+// arrayStretchFromMacro returns the value of the \arraystretch macro if
+// defined (parsed as a float), or fallback otherwise. Mirrors upstream's
+// `\arraystretch` lookup at array-build time.
+func arrayStretchFromMacro(p *Parser, fallback float64) float64 {
+	body, ok := p.gullet.MacroBodyText(`\arraystretch`)
+	if !ok {
+		return fallback
+	}
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return fallback
+	}
+	var n float64
+	if _, err := fmt.Sscanf(body, "%f", &n); err == nil && n > 0 {
+		return n
+	}
+	return fallback
 }
 
 // parseColumnSpec turns "ccr|l" into a list of AlignSpecs (with separators).

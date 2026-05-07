@@ -308,6 +308,25 @@ func (e *Expander) HasMacro(name string) bool {
 	return ok
 }
 
+// MacroBodyText returns the textual body of a macro definition. For text-
+// based macros it returns Definition.Text; for token-based macros it
+// concatenates token text. Returns ("", false) if the macro is missing,
+// function-based, or has args.
+func (e *Expander) MacroBodyText(name string) (string, bool) {
+	def, ok := e.macros[name]
+	if !ok || def.Fn != nil || def.NumArg > 0 {
+		return "", false
+	}
+	if def.Text != "" {
+		return def.Text, true
+	}
+	var b strings.Builder
+	for _, t := range def.Tokens {
+		b.WriteString(t.Text)
+	}
+	return b.String(), true
+}
+
 // lexBodySource lexes a macro body in source order (NOT stack order). Used
 // at registration time when the body's tokens are spliced via #N substitution
 // — the per-call `expandTokens` reverses to stack order at the end.

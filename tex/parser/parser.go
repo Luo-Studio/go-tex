@@ -101,6 +101,13 @@ func (p *Parser) consumeSpaces() {
 	}
 }
 
+// advanceAndReturn consumes the current token and returns nil — convenient
+// for no-op functions like \relax.
+func (p *Parser) advanceAndReturn() error {
+	p.advance()
+	return nil
+}
+
 func (p *Parser) expect(text string) error {
 	if p.cur.Text != text {
 		return errAt(fmt.Sprintf("Expected '%s', got '%s'", text, p.cur.Text), p.cur)
