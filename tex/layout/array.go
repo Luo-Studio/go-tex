@@ -121,16 +121,30 @@ func layoutArray(a *parser.Array, opts Options) *Box {
 	for i := range colAligns {
 		colAligns[i] = 'c'
 	}
+	// col_separators[i] for i in [0, numCols]: nil = no rule, false = '|',
+	// true = ':' (dashed). Mirrors upstream.
+	colSeparators := make([]*bool, numCols+1)
 	if a.Cols != nil {
-		ai := 0
+		alignCount := 0
 		for _, sp := range a.Cols {
-			if sp.Type != parser.AlignTypeAlign {
-				continue
+			switch sp.Type {
+			case parser.AlignTypeAlign:
+				if alignCount < numCols && sp.Align != nil && len(*sp.Align) > 0 {
+					colAligns[alignCount] = (*sp.Align)[0]
+				}
+				alignCount++
+			case parser.AlignTypeSeparator:
+				if sp.Align != nil && alignCount <= numCols {
+					switch *sp.Align {
+					case "|":
+						v := false
+						colSeparators[alignCount] = &v
+					case ":":
+						v := true
+						colSeparators[alignCount] = &v
+					}
+				}
 			}
-			if ai < numCols && sp.Align != nil && len(*sp.Align) > 0 {
-				colAligns[ai] = (*sp.Align)[0]
-			}
-			ai++
 		}
 	}
 
@@ -175,6 +189,9 @@ func layoutArray(a *parser.Array, opts Options) *Box {
 			ContentXOffset:  contentXOffset,
 			HLinesBeforeRow: hlines,
 			ArrayInnerWidth: arrayInnerW,
+			ColSeparators:   colSeparators,
+			RuleThickness:   0.4 / metrics.PtPerEm,
+			DoubleRuleSep:   metrics.DoubleRuleSep,
 			TagGapEm:        tagGapEm,
 			TagColWidth:     tagColWidth,
 			RowTags:         rowTagBoxes,
