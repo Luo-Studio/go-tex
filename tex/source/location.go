@@ -8,9 +8,11 @@ package source
 // Positions are byte offsets, not rune offsets, matching the upstream RaTeX
 // (and KaTeX) convention. Tools that need column numbers should re-walk the
 // input themselves.
+//
+// JSON field names are lowercase to match the upstream RaTeX/KaTeX shape.
 type Location struct {
-	Start int
-	End   int
+	Start int `json:"start"`
+	End   int `json:"end"`
 }
 
 // Range returns the smallest location covering both a and b: it spans from
