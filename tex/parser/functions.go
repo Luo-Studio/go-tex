@@ -27,8 +27,14 @@ func functionDispatch(p *Parser, callerName, breakOnText string) (Node, error) {
 		return parseText(p)
 	case `\mathrm`, `\mathit`, `\mathbf`, `\mathnormal`, `\mathsf`,
 		`\mathtt`, `\mathfrak`, `\mathcal`, `\mathbb`, `\mathscr`,
-		`\Bbb`, `\frak`:
+		`\Bbb`, `\frak`, `\bold`, `\mathsfit`:
 		return parseMathFont(p)
+	case `\rm`, `\sf`, `\tt`, `\bf`, `\it`, `\cal`:
+		return parseOldFont(p, breakOnText)
+	case `\boldsymbol`, `\bm`:
+		return parseBoldsymbol(p)
+	case `\emph`:
+		return parseEmph(p)
 	case `\left`:
 		return parseLeft(p)
 	case `\right`:
@@ -338,6 +344,7 @@ func parseMathFont(p *Parser) (Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	body = NormalizeArgument(body)
 	font := mathFontKaTeXName(cmd)
 	return &Font{Mode: p.mode, Font: font, Body: body}, nil
 }
@@ -347,15 +354,70 @@ func parseMathFont(p *Parser) (Node, error) {
 //	\mathrm  -> mathrm
 //	\Bbb     -> mathbb
 //	\frak    -> mathfrak
+//	\bold    -> mathbf
 //	\mathbf  -> mathbf, etc.
 func mathFontKaTeXName(cmd string) string {
-	if cmd == `\Bbb` {
+	switch cmd {
+	case `\Bbb`:
 		return "mathbb"
-	}
-	if cmd == `\frak` {
+	case `\frak`:
 		return "mathfrak"
+	case `\bold`:
+		return "mathbf"
 	}
 	return strings.TrimPrefix(cmd, `\`)
+}
+
+// parseOldFont handles \rm, \sf, \tt, \bf, \it, \cal — old-style font
+// switches that consume the rest of the current group.
+func parseOldFont(p *Parser, breakOnText string) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	body, err := p.parseExpression(true, breakOnText)
+	if err != nil {
+		return nil, err
+	}
+	font := "math" + cmd[1:]
+	return &Font{
+		Mode: p.mode,
+		Font: font,
+		Body: &OrdGroup{Mode: p.mode, Body: body},
+	}, nil
+}
+
+// parseBoldsymbol handles \boldsymbol and \bm — emit MClass[Font[boldsymbol]].
+func parseBoldsymbol(p *Parser) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	body, err := parseFunctionArg(p, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return &MClass{
+		Mode:   p.mode,
+		Mclass: "mord",
+		Body: []Node{&Font{
+			Mode: p.mode,
+			Font: "boldsymbol",
+			Body: body,
+		}},
+		IsCharacterBox: false,
+	}, nil
+}
+
+// parseEmph handles \emph{...} — emit Text node with font="\emph".
+func parseEmph(p *Parser) (Node, error) {
+	p.advance()
+	body, err := parseFunctionArg(p, `\emph`)
+	if err != nil {
+		return nil, err
+	}
+	font := `\emph`
+	return &Text{
+		Mode: p.mode,
+		Body: OrdArgument(body),
+		Font: &font,
+	}, nil
 }
 
 // =============================================================================
