@@ -416,10 +416,28 @@ func layoutNode(n parser.Node, opts Options) *Box {
 			Width: 0, Height: inner.Height, Depth: inner.Depth, Color: opts.Color,
 			Content: HBox{Children: children},
 		}
+	case *parser.Pmb:
+		// \pmb / \bm: poor man's bold — overlay two copies of the body
+		// shifted by 0.02em.
+		base := layoutExpression(v.Body, opts, true)
+		shadow := layoutExpression(v.Body, opts, true)
+		shift := 0.02
+		hbox := makeHBox([]*Box{
+			NewKern(shift),
+			shadow,
+			NewKern(-base.Width),
+			base,
+		}, opts.Color)
+		return &Box{
+			Width:   base.Width,
+			Height:  base.Height,
+			Depth:   base.Depth,
+			Color:   opts.Color,
+			Content: hbox.Content,
+		}
 	case *parser.Cr, *parser.Infix, *parser.Middle,
 		*parser.LeftRightRight,
-		*parser.XArrow, *parser.VCenter, *parser.Tag,
-		*parser.Pmb:
+		*parser.XArrow, *parser.VCenter, *parser.Tag:
 		// TODO: full layout for these; for now just lay out subtrees we
 		// know how to handle, otherwise empty.
 		return NewEmpty()
