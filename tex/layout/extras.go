@@ -305,13 +305,20 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 	if a.Label == `\textcircled` {
 		return layoutTextcircled(base, opts)
 	}
-	// KaTeX SVG-path wide accents (\widehat, \widetilde, \widecheck,
-	// \overgroup, \undergroup, \utilde, \vec): use the SVG accent
-	// from katex_svg, sized to base width.
 	baseW := base.Width
 	if baseW < 0.5 {
 		baseW = 0.5
 	}
+	isStretchy := a.IsStretchy != nil && *a.IsStretchy
+	// Stretchy arrow-style accents (\overrightarrow / \overleftarrow /
+	// \overleftrightarrow / \Overrightarrow / \overleftharpoon / etc.):
+	// use katex_stretchy_path centered at midline.
+	if isStretchy && isArrowAccent(a.Label) {
+		return layoutArrowAccent(a, base, baseW, false, opts)
+	}
+	// KaTeX SVG-path wide accents (\widehat, \widetilde, \widecheck,
+	// \overgroup, \undergroup, \utilde, \vec): use the SVG accent
+	// from katex_svg, sized to base width.
 	if pcmds, pw, ph, _, ok := katexAccentPath(a.Label, baseW, accentOrdGroupLen(a.Base)); ok {
 		return layoutSVGAccent(a, base, pcmds, pw, ph, opts)
 	}
@@ -400,6 +407,61 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 			Skew:       skew,
 			Clearance:  clearance,
 			Correction: cm.Height - visCap,
+		},
+	}
+}
+
+// isArrowAccent reports whether label uses a stretchy SVG arrow path
+// (mirrors upstream is_arrow_accent).
+func isArrowAccent(label string) bool {
+	switch label {
+	case `\overrightarrow`, `\overleftarrow`, `\Overrightarrow`,
+		`\overleftrightarrow`, `\underrightarrow`, `\underleftarrow`,
+		`\underleftrightarrow`, `\overleftharpoon`, `\overrightharpoon`,
+		`\overlinesegment`, `\underlinesegment`:
+		return true
+	}
+	return false
+}
+
+// layoutArrowAccent builds an Accent box with a stretchy arrow SVG path
+// (over/under arrow accents). Mirrors upstream layout_accent's arrow branch.
+func layoutArrowAccent(a *parser.Accent, base *Box, baseW float64, isBelow bool, opts Options) *Box {
+	cmds, arrowH, ok := katexStretchyPath(a.Label, baseW)
+	if !ok {
+		return base
+	}
+	// The path is centered at midline (height=h/2, depth=h/2).
+	accentBox := &Box{
+		Width: baseW, Height: arrowH / 2, Depth: arrowH / 2, Color: opts.Color,
+		Content: SvgPath{Commands: cmds, Fill: true},
+	}
+	gap := 0.26
+	if a.Label == `\Overrightarrow` {
+		gap = 0.21
+	}
+	var clearance, height, depth float64
+	if isBelow {
+		clearance = base.Height + base.Depth + accentBox.Depth + gap
+		height = base.Height
+		depth = base.Depth + accentBox.Height + accentBox.Depth + gap
+	} else {
+		clearance = base.Height + gap
+		height = base.Height + gap + accentBox.Height
+		depth = base.Depth
+	}
+	return &Box{
+		Width:  base.Width,
+		Height: height,
+		Depth:  depth,
+		Color:  opts.Color,
+		Content: Accent{
+			Base:       base,
+			AccentBox:  accentBox,
+			Clearance:  clearance,
+			Skew:       0,
+			IsBelow:    isBelow,
+			UnderGapEm: 0,
 		},
 	}
 }
@@ -516,6 +578,52 @@ func baseSkew(n parser.Node, opts Options) float64 {
 
 func layoutAccentUnder(a *parser.AccentUnder, opts Options) *Box {
 	base := layoutNode(a.Base, opts)
+	baseW := base.Width
+	if baseW < 0.5 {
+		baseW = 0.5
+	}
+	// Stretchy below-accents (\underrightarrow / \underleftarrow /
+	// \underleftrightarrow / \underlinesegment): use katex_stretchy_path.
+	if isArrowAccent(a.Label) {
+		// Construct an Accent equivalent for the below path.
+		fakeAccent := &parser.Accent{
+			Mode:       a.Mode,
+			Label:      a.Label,
+			IsStretchy: a.IsStretchy,
+			IsShifty:   a.IsShifty,
+			Base:       a.Base,
+		}
+		return layoutArrowAccent(fakeAccent, base, baseW, true, opts)
+	}
+	// \utilde / \undergroup: SVG accent path applied below.
+	if pcmds, pw, ph, _, ok := katexAccentPath(a.Label, baseW, accentOrdGroupLen(a.Base)); ok {
+		// Build Accent with isBelow=true.
+		accentBox := &Box{
+			Width: pw, Height: 0, Depth: ph, Color: opts.Color,
+			Content: SvgPath{Commands: pcmds, Fill: true},
+		}
+		gap := 0.065
+		underGapEm := 0.0
+		if a.Label == `\utilde` {
+			underGapEm = 0.12
+		}
+		clearance := base.Height + base.Depth + gap
+		height := base.Height
+		depth := base.Depth + ph + gap + underGapEm
+		return &Box{
+			Width:  base.Width,
+			Height: height,
+			Depth:  depth,
+			Color:  opts.Color,
+			Content: Accent{
+				Base:       base,
+				AccentBox:  accentBox,
+				Clearance:  clearance,
+				IsBelow:    true,
+				UnderGapEm: underGapEm,
+			},
+		}
+	}
 	return base
 }
 
