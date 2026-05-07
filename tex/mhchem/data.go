@@ -4,8 +4,9 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"sync"
+
+	"github.com/dlclark/regexp2"
 )
 
 //go:embed data/machines.json
@@ -44,9 +45,13 @@ type ActionSpec struct {
 }
 
 // Data holds the loaded JSON tables and compiled regex patterns.
+//
+// Patterns use github.com/dlclark/regexp2 which supports the JS/Perl-style
+// look-around and back-reference constructs the upstream patterns rely on
+// (Go's stdlib regexp / RE2 doesn't).
 type Data struct {
 	Machines Machines
-	Regexes  map[string]*regexp.Regexp
+	Regexes  map[string]*regexp2.Regexp
 }
 
 var (
@@ -84,58 +89,17 @@ func loadDataImpl() (*Data, error) {
 	if err := json.Unmarshal(patternsRegexJSON, &pr); err != nil {
 		return nil, fmt.Errorf("mhchem: parse patterns_regex.json: %w", err)
 	}
-	regexes := make(map[string]*regexp.Regexp, len(pr.Regex))
+	regexes := make(map[string]*regexp2.Regexp, len(pr.Regex))
 	for name, src := range pr.Regex {
-		// The upstream patterns assume Perl/JS regex semantics with
-		// look-around. Go's RE2 doesn't support look-around. We compile
-		// the patterns we can; ones that fail are stored as nil and
-		// fall back at runtime to a slow string match (or skip the
-		// pattern, accepting reduced coverage).
-		re, err := regexp.Compile(translateRegex(src))
+		// dlclark/regexp2 accepts JS/Perl/.NET-style syntax (look-around,
+		// back-references) which the upstream patterns rely on. The
+		// ECMAScript flag relaxes escape handling so e.g. \_ — accepted
+		// in JS but rejected by .NET — also compiles.
+		re, err := regexp2.Compile(src, regexp2.ECMAScript)
 		if err != nil {
-			regexes[name] = nil
-			continue
+			return nil, fmt.Errorf("mhchem: compile pattern %q: %w", name, err)
 		}
 		regexes[name] = re
 	}
 	return &Data{Machines: machines, Regexes: regexes}, nil
-}
-
-// translateRegex strips look-around constructs that RE2 doesn't accept.
-// This is a best-effort translation: many upstream patterns rely on
-// look-ahead and won't match identically. Patterns that can't be
-// translated stay as nil regexes (see loadDataImpl), and the engine
-// falls back to literal matching where possible.
-func translateRegex(src string) string {
-	// (?=...) and (?!...) and (?<=...) etc. — drop the look-around so
-	// the regex compiles. This loses semantic accuracy.
-	out := []byte{}
-	for i := 0; i < len(src); i++ {
-		if i+2 < len(src) && src[i] == '(' && src[i+1] == '?' &&
-			(src[i+2] == '=' || src[i+2] == '!' || src[i+2] == '<') {
-			// Skip the look-around to its matching ')'.
-			depth := 1
-			j := i + 3
-			if src[i+2] == '<' && j < len(src) && (src[j] == '=' || src[j] == '!') {
-				j++
-			}
-			for j < len(src) && depth > 0 {
-				switch src[j] {
-				case '(':
-					depth++
-				case ')':
-					depth--
-				case '\\':
-					if j+1 < len(src) {
-						j++
-					}
-				}
-				j++
-			}
-			i = j - 1
-			continue
-		}
-		out = append(out, src[i])
-	}
-	return string(out)
 }
