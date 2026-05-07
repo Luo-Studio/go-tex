@@ -190,15 +190,23 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 	}
 	// Mirrors upstream handle_accent_clearance for non-stretchy, non-arrow,
 	// non-nested-Accent bodies.
-	katexPos := base.Height - xHeight
-	if katexPos < 0 {
-		katexPos = 0
+	var clearance float64
+	if a.Label == `\bar` || a.Label == `\=` {
+		// Macron special case: clearance = body.height (less the
+		// 0.12em macron adjustment applied below).
+		clearance = base.Height
+	} else {
+		katexPos := base.Height - xHeight
+		if katexPos < 0 {
+			katexPos = 0
+		}
+		correction := cm.Height - visCap
+		if correction < 0 {
+			correction = 0
+		}
+		clearance = katexPos + correction
 	}
-	correction := cm.Height - visCap
-	if correction < 0 {
-		correction = 0
-	}
-	clearance := katexPos + correction + cm.Depth
+	clearance += cm.Depth
 	if a.Label == `\bar` || a.Label == `\=` {
 		clearance -= 0.12
 		if clearance < 0 {
@@ -226,10 +234,11 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 		Depth:  base.Depth,
 		Color:  opts.Color,
 		Content: Accent{
-			Base:      base,
-			AccentBox: accentBox,
-			Skew:      skew,
-			Clearance: clearance,
+			Base:       base,
+			AccentBox:  accentBox,
+			Skew:       skew,
+			Clearance:  clearance,
+			Correction: cm.Height - visCap,
 		},
 	}
 }

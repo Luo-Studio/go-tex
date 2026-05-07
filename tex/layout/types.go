@@ -200,6 +200,7 @@ type Accent struct {
 	Base       *Box
 	AccentBox  *Box
 	Clearance  float64
+	Correction float64 // accent.height - min(0.35, accent.height)
 	Skew       float64
 	IsBelow    bool
 	UnderGapEm float64
