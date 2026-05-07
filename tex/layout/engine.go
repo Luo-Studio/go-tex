@@ -74,7 +74,7 @@ func layoutNode(n parser.Node, opts Options) *Box {
 			barThickness = 0
 		}
 		if v.BarSize != nil {
-			barThickness = v.BarSize.Number
+			barThickness = measurementToEm(*v.BarSize, opts)
 		}
 		frac := layoutFraction(v.Numer, v.Denom, barThickness, v.Continued, opts)
 		// KaTeX wraps every \\frac/\\atop in mopen+mclose nulldelimiter spans
