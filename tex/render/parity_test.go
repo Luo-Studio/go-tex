@@ -11,21 +11,20 @@ import (
 
 	"github.com/luo-studio/go-tex/tex/layout"
 	"github.com/luo-studio/go-tex/tex/parser"
-	"github.com/luo-studio/go-tex/tex/svg"
 )
 
-// TestPNGStructuralParity is a sanity harness: for each golden case, we
-// render via parser->layout->svg->oksvg+rasterx, decode the upstream
-// reference PNG, and report:
+// TestPNGStructuralParity is a sanity harness: for each golden case,
+// render via parser→layout→canvasr→PNG, decode the upstream reference
+// PNG, and report:
 //
 //   - byte-identical: how many output PNGs are byte-for-byte equal to
-//     upstream (very unlikely without TTF glyph parity).
+//     upstream (very unlikely without ab_glyph rasteriser parity).
 //   - dim-match: how many have the same pixel dimensions as upstream.
 //   - first failure example.
 //
-// Pixel-identical PNGs require porting ab_glyph's rasteriser (or
-// shipping the same TTFs through it). This test sets the floor and
-// shows where the renderer pipeline is end-to-end.
+// Pixel-identical PNGs require porting ab_glyph's rasteriser. This
+// test sets the floor and shows that the renderer pipeline is
+// end-to-end functional (PNGs decode, dimensions match SVG output).
 func TestPNGStructuralParity(t *testing.T) {
 	corpusPath := filepath.Join("..", "..", "testdata", "golden", "test_cases.txt")
 	goldenDir := filepath.Join("..", "..", "testdata", "golden", "output")
@@ -56,8 +55,7 @@ func TestPNGStructuralParity(t *testing.T) {
 		}
 		box := layout.Layout(body, layout.DefaultOptions())
 		dl := layout.ToDisplayList(box)
-		svgStr := svg.Render(dl, svg.DefaultOptions())
-		ours, err := PNG(svgStr, 0, 0)
+		ours, err := PNG(dl)
 		if err != nil {
 			if firstFailure == "" {
 				firstFailure = expr + " (render: " + err.Error() + ")"

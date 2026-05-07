@@ -5,7 +5,6 @@ import (
 
 	"github.com/luo-studio/go-tex/tex/layout"
 	"github.com/luo-studio/go-tex/tex/parser"
-	"github.com/luo-studio/go-tex/tex/svg"
 )
 
 func TestPNGSimpleA(t *testing.T) {
@@ -15,8 +14,7 @@ func TestPNGSimpleA(t *testing.T) {
 	}
 	box := layout.Layout(body, layout.DefaultOptions())
 	dl := layout.ToDisplayList(box)
-	out := svg.Render(dl, svg.DefaultOptions())
-	pngBytes, err := PNG(out, 0, 0)
+	pngBytes, err := PNG(dl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,5 +24,21 @@ func TestPNGSimpleA(t *testing.T) {
 	// PNG signature: 0x89 P N G
 	if pngBytes[0] != 0x89 || string(pngBytes[1:4]) != "PNG" {
 		t.Error("output is not a valid PNG")
+	}
+}
+
+func TestPNGFraction(t *testing.T) {
+	body, err := parser.Parse(`\frac{1}{2}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	box := layout.Layout(body, layout.DefaultOptions())
+	dl := layout.ToDisplayList(box)
+	pngBytes, err := PNG(dl, WithScale(2.0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pngBytes) < 200 {
+		t.Errorf("expected non-trivial png, got %d bytes", len(pngBytes))
 	}
 }
