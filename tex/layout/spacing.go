@@ -127,7 +127,7 @@ func nodeMathClass(n parser.Node) (MathClass, bool) {
 		*parser.Underline, *parser.Rule, *parser.RaiseBox,
 		*parser.HBox, *parser.MathChoice, *parser.Styling, *parser.Sizing,
 		*parser.Enclose, *parser.Pmb, *parser.Href, *parser.URL,
-		*parser.HorizBrace, *parser.VCenter:
+		*parser.HorizBrace, *parser.VCenter, *parser.Text, *parser.Verb:
 		return ClassOrd, true
 	case *parser.OpToken, *parser.Op, *parser.OperatorName:
 		return ClassOp, true
