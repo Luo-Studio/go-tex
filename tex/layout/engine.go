@@ -374,9 +374,27 @@ func layoutNode(n parser.Node, opts Options) *Box {
 			Color: linkColor,
 			Content: Underline{Body: inner, RuleThickness: rt},
 		}
+	case *parser.Lap:
+		inner := layoutNode(v.Body, opts)
+		shift := 0.0
+		switch v.Alignment {
+		case "llap":
+			shift = -inner.Width
+		case "clap":
+			shift = -inner.Width / 2
+		}
+		var children []*Box
+		if shift != 0 {
+			children = append(children, NewKern(shift))
+		}
+		children = append(children, inner)
+		return &Box{
+			Width: 0, Height: inner.Height, Depth: inner.Depth, Color: opts.Color,
+			Content: HBox{Children: children},
+		}
 	case *parser.Cr, *parser.Infix, *parser.Middle,
 		*parser.LeftRightRight,
-		*parser.XArrow, *parser.Lap, *parser.VCenter, *parser.Tag,
+		*parser.XArrow, *parser.VCenter, *parser.Tag,
 		*parser.Pmb:
 		// TODO: full layout for these; for now just lay out subtrees we
 		// know how to handle, otherwise empty.
