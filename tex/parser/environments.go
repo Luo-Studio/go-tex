@@ -296,11 +296,36 @@ func parseArrayRow(p *Parser, cellStyle StyleStr) ([]Node, error) {
 func handleMatrixEnv(p *Parser, fullName, base string) (Node, error) {
 	delims := matrixDelims(base)
 	cellStyle := dCellStyle(fullName)
+
+	// Starred variants (matrix*, pmatrix*, ...) accept an optional
+	// [l|c|r] alignment argument before the body.
+	colAlign := "c"
+	if strings.HasSuffix(fullName, "*") {
+		p.consumeSpaces()
+		if p.cur.Text == "[" {
+			p.advance()
+			p.consumeSpaces()
+			if t := p.cur.Text; t == "l" || t == "c" || t == "r" {
+				colAlign = t
+				p.advance()
+			}
+			p.consumeSpaces()
+			if p.cur.Text == "]" {
+				p.advance()
+			}
+		}
+	}
+
 	rows, rowGaps, err := parseArrayBody(p, cellStyle)
 	if err != nil {
 		return nil, err
 	}
-	cols := arrayCenterCols(rowMaxCols(rows))
+	numCols := rowMaxCols(rows)
+	cols := make([]AlignSpec, numCols)
+	for i := range cols {
+		c := colAlign
+		cols[i] = AlignSpec{Type: AlignTypeAlign, Align: &c}
+	}
 	hlines := buildEmptyHLines(len(rows))
 	arr := &Array{
 		Mode:            p.mode,
