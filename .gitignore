@@ -1,0 +1,21 @@
+# Build output
+bin/
+dist/
+/go-tex
+/lex
+/output_svg/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage.out
+*.test
+*.out
