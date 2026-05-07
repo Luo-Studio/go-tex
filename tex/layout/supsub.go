@@ -179,6 +179,15 @@ func layoutSupSubNode(base, sup, sub parser.Node, opts Options) *Box {
 	if base != nil && shouldUseOpLimits(base, opts) {
 		return layoutOpWithLimits(base, sup, sub, opts)
 	}
+	// HorizBrace base + sup/sub: use centered scripts with fixed 0.2em
+	// kern (mirrors KaTeX horizBrace htmlBuilder).
+	horizBraceOver := false
+	horizBraceUnder := false
+	if hb, ok := base.(*parser.HorizBrace); ok {
+		horizBraceOver = hb.IsOver
+		horizBraceUnder = !hb.IsOver
+	}
+	centerScripts := horizBraceOver || horizBraceUnder
 	var baseBox *Box
 	if base != nil {
 		baseBox = layoutNode(base, opts)
@@ -257,11 +266,20 @@ func layoutSupSubNode(base, sup, sub parser.Node, opts Options) *Box {
 		supShift = max64(max64(supShift, minSupShift), supD+0.25*metrics.XHeight)
 	}
 
+	// HorizBrace: KaTeX horizBrace.js htmlBuilder uses VList with a fixed
+	// 0.2em kern between the brace result and the script.
+	if horizBraceOver && supBox != nil {
+		supShift = baseBox.Height + 0.2 + supD
+	}
+	if horizBraceUnder && subBox != nil {
+		subShift = baseBox.Depth + 0.2 + subH
+	}
+
 	// KaTeX supsub.js: for SymbolNode bases, subscripts get
 	// margin-left: -base.italic so they don't shift right with the italic
 	// correction (e.g. ∫_{A_1}). Mirrors upstream sub_h_kern.
 	subHKern := 0.0
-	if subBox != nil {
+	if subBox != nil && !centerScripts {
 		subHKern = -opSymbolSlant(baseBox)
 	}
 
@@ -273,7 +291,13 @@ func layoutSupSubNode(base, sup, sub parser.Node, opts Options) *Box {
 		if h := supShift + supH; h > height {
 			height = h
 		}
-		if w := baseBox.Width + supBox.Width*supRatio + scriptSpace; w > totalWidth {
+		var w float64
+		if centerScripts {
+			w = supBox.Width*supRatio + scriptSpace
+		} else {
+			w = baseBox.Width + supBox.Width*supRatio + scriptSpace
+		}
+		if w > totalWidth {
 			totalWidth = w
 		}
 	}
@@ -281,7 +305,13 @@ func layoutSupSubNode(base, sup, sub parser.Node, opts Options) *Box {
 		if d := subShift + subD; d > depth {
 			depth = d
 		}
-		if w := baseBox.Width + subHKern + subBox.Width*subRatio + scriptSpace; w > totalWidth {
+		var w float64
+		if centerScripts {
+			w = subBox.Width*subRatio + scriptSpace
+		} else {
+			w = baseBox.Width + subHKern + subBox.Width*subRatio + scriptSpace
+		}
+		if w > totalWidth {
 			totalWidth = w
 		}
 	}
@@ -292,14 +322,15 @@ func layoutSupSubNode(base, sup, sub parser.Node, opts Options) *Box {
 		Depth:  depth,
 		Color:  opts.Color,
 		Content: SupSub{
-			Base:     baseBox,
-			Sup:      supBox,
-			Sub:      subBox,
-			SupShift: supShift,
-			SubShift: subShift,
-			SupScale: supRatio,
-			SubScale: subRatio,
-			SubHKern: subHKern,
+			Base:          baseBox,
+			Sup:           supBox,
+			Sub:           subBox,
+			SupShift:      supShift,
+			SubShift:      subShift,
+			SupScale:      supRatio,
+			SubScale:      subRatio,
+			SubHKern:      subHKern,
+			CenterScripts: centerScripts,
 		},
 	}
 }

@@ -295,8 +295,7 @@ func layoutNode(n parser.Node, opts Options) *Box {
 		}
 		return layoutNode(v.Body, opts)
 	case *parser.HorizBrace:
-		// Stub: just lay out base.
-		return layoutNode(v.Base, opts)
+		return layoutHorizBrace(v, opts)
 	case *parser.RaiseBox:
 		// \raisebox{dy}{body}: positive shift moves body up.
 		shift := measurementToEm(v.Dy, opts)

@@ -1,6 +1,8 @@
 package layout
 
 import (
+	"strings"
+
 	"github.com/luo-studio/go-tex/tex/fontmetrics"
 	"github.com/luo-studio/go-tex/tex/parser"
 	"github.com/luo-studio/go-tex/tex/path"
@@ -407,6 +409,78 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 			Skew:       skew,
 			Clearance:  clearance,
 			Correction: cm.Height - visCap,
+		},
+	}
+}
+
+// layoutHorizBrace handles \overbrace{body} / \underbrace{body} and the
+// mathtools \overbracket{body} / \underbracket{body}. Mirrors upstream
+// layout_horiz_brace.
+func layoutHorizBrace(h *parser.HorizBrace, opts Options) *Box {
+	body := layoutNode(h.Base, opts)
+	w := body.Width
+	if w < 0.5 {
+		w = 0.5
+	}
+	isBracket := strings.HasSuffix(strings.TrimPrefix(h.Label, `\`), "bracket")
+	var stretchKey string
+	switch {
+	case isBracket && h.IsOver:
+		stretchKey = `\overbracket`
+	case isBracket:
+		stretchKey = `\underbracket`
+	case h.IsOver:
+		stretchKey = `\overbrace`
+	default:
+		stretchKey = `\underbrace`
+	}
+	cmds, braceH, ok := katexStretchyPath(stretchKey, w)
+	if !ok {
+		return body
+	}
+	// Shift y by +braceH/2 so range becomes [0, braceH] (height=0, depth=braceH).
+	yShift := braceH / 2
+	shifted := make([]path.Command, len(cmds))
+	for i, c := range cmds {
+		shifted[i] = c
+		switch c.Kind {
+		case path.KindMoveTo, path.KindLineTo:
+			shifted[i].Y = c.Y + yShift
+		case path.KindCubicTo:
+			shifted[i].Y1 = c.Y1 + yShift
+			shifted[i].Y2 = c.Y2 + yShift
+			shifted[i].Y = c.Y + yShift
+		case path.KindQuadTo:
+			shifted[i].Y1 = c.Y1 + yShift
+			shifted[i].Y = c.Y + yShift
+		}
+	}
+	braceBox := &Box{
+		Width: w, Height: 0, Depth: braceH, Color: opts.Color,
+		Content: SvgPath{Commands: shifted, Fill: true},
+	}
+	gap := 0.1
+	var height, depth, clearance float64
+	if h.IsOver {
+		height = body.Height + braceH + gap
+		depth = body.Depth
+		clearance = height - braceH
+	} else {
+		height = body.Height
+		depth = body.Depth + braceH + gap
+		clearance = body.Height + body.Depth + gap
+	}
+	return &Box{
+		Width:  body.Width,
+		Height: height,
+		Depth:  depth,
+		Color:  opts.Color,
+		Content: Accent{
+			Base:       body,
+			AccentBox:  braceBox,
+			Clearance:  clearance,
+			IsBelow:    !h.IsOver,
+			UnderGapEm: 0,
 		},
 	}
 }

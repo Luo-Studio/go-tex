@@ -365,17 +365,30 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 		}
 	case SupSub:
 		// Base baseline at y + b.Height*scale.
-		emit(c.Base, dl, x, y+(b.Height-c.Base.Height)*scale, scale)
+		baseLeftX := x
+		if c.CenterScripts {
+			// Center base within the SupSub box (which may be wider).
+			baseLeftX = x + (b.Width-c.Base.Width)*scale/2
+		}
+		emit(c.Base, dl, baseLeftX, y+(b.Height-c.Base.Height)*scale, scale)
 		baseW := c.Base.Width * scale
 		if c.Sup != nil {
 			supScale := scale * c.SupScale
 			supTop := y + (b.Height-c.SupShift)*scale - c.Sup.Height*supScale
-			emit(c.Sup, dl, x+baseW, supTop, supScale)
+			supX := x + baseW
+			if c.CenterScripts {
+				supX = x + (b.Width*scale-c.Sup.Width*supScale)/2
+			}
+			emit(c.Sup, dl, supX, supTop, supScale)
 		}
 		if c.Sub != nil {
 			subScale := scale * c.SubScale
 			subTop := y + (b.Height+c.SubShift)*scale - c.Sub.Height*subScale
-			emit(c.Sub, dl, x+baseW+c.SubHKern*scale, subTop, subScale)
+			subX := x + baseW + c.SubHKern*scale
+			if c.CenterScripts {
+				subX = x + (b.Width*scale-c.Sub.Width*subScale)/2
+			}
+			emit(c.Sub, dl, subX, subTop, subScale)
 		}
 	case Overline:
 		// Box height = body.height + 3*rt. Body sits at the bottom of the
