@@ -445,9 +445,20 @@ func layoutNode(n parser.Node, opts Options) *Box {
 		}
 		placeholder := makeStretchyDelim(v.Delim, 1.0, opts)
 		return &Box{Width: placeholder.Width, Color: opts.Color, Content: Empty{}}
+	case *parser.VCenter:
+		// Center body on the math axis.
+		inner := layoutNode(v.Body, opts)
+		axis := opts.Metrics().AxisHeight
+		total := inner.Height + inner.Depth
+		h := total/2 + axis
+		d := total - h
+		return &Box{
+			Width: inner.Width, Height: h, Depth: d, Color: inner.Color,
+			Content: inner.Content,
+		}
 	case *parser.Cr, *parser.Infix,
 		*parser.LeftRightRight,
-		*parser.XArrow, *parser.VCenter, *parser.Tag:
+		*parser.XArrow, *parser.Tag:
 		// TODO: full layout for these; for now just lay out subtrees we
 		// know how to handle, otherwise empty.
 		return NewEmpty()
