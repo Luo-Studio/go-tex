@@ -167,13 +167,23 @@ func layoutNode(n parser.Node, opts Options) *Box {
 		}
 		return body
 	case *parser.Phantom:
-		// Phantom: lay out body but the box still has full dimensions.
-		// We simply lay out the body as normal for the dim parity.
-		return layoutExpression(v.Body, opts, true)
+		// Phantom: keep width/height/depth but emit no glyphs.
+		b := layoutExpression(v.Body, opts, true)
+		return &Box{Width: b.Width, Height: b.Height, Depth: b.Depth, Color: opts.Color, Content: Empty{}}
 	case *parser.VPhantom:
 		b := layoutNode(v.Body, opts)
-		// VPhantom keeps height+depth, no width.
 		return &Box{Width: 0, Height: b.Height, Depth: b.Depth, Color: opts.Color, Content: Empty{}}
+	case *parser.Smash:
+		b := layoutNode(v.Body, opts)
+		h := b.Height
+		d := b.Depth
+		if v.SmashHeight {
+			h = 0
+		}
+		if v.SmashDepth {
+			d = 0
+		}
+		return &Box{Width: b.Width, Height: h, Depth: d, Color: opts.Color, Content: b.Content}
 	case *parser.HBox:
 		return layoutExpression(v.Body, opts, true)
 	case *parser.Text:
