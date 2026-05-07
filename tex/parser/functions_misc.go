@@ -421,6 +421,33 @@ func parseHorizBracket(p *Parser) (Node, error) {
 }
 
 // =============================================================================
+// \\ and \newline outside an array context emit a Cr node.
+// =============================================================================
+
+func parseCr(p *Parser) (Node, error) {
+	p.advance()
+	p.consumeSpaces()
+	var size *Measurement
+	if p.cur.Text == "[" {
+		p.advance()
+		var raw strings.Builder
+		for !p.cur.IsEOF() && p.cur.Text != "]" {
+			raw.WriteString(p.cur.Text)
+			p.advance()
+		}
+		if p.cur.Text == "]" {
+			p.advance()
+		}
+		if s := strings.TrimSpace(raw.String()); s != "" {
+			if n, u, ok := splitSize(s); ok {
+				size = &Measurement{Number: n, Unit: u}
+			}
+		}
+	}
+	return &Cr{Mode: p.mode, NewLine: true, Size: size}, nil
+}
+
+// =============================================================================
 // \nonumber / \notag
 // =============================================================================
 

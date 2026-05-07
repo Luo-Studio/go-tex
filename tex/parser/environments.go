@@ -88,14 +88,13 @@ func handleSmallMatrixEnv(p *Parser, name string) (Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	cols := arrayCenterCols(rowMaxCols(rows))
+	smallSep := "small"
 	return &Array{
 		Mode:              p.mode,
 		Body:              rows,
 		RowGaps:           rowGaps,
 		HLinesBeforeRow:   hlines,
-		Cols:              cols,
-		HskipBeforeAndAft: boolPtr(false),
+		ColSeparationType: &smallSep,
 		ArrayStretch:      0.5,
 	}, nil
 }

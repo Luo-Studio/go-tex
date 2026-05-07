@@ -126,6 +126,8 @@ func functionDispatch(p *Parser, callerName, breakOnText string) (Node, error) {
 		return parseHBox(p)
 	case `\html@mathml`:
 		return parseHtmlMathml(p)
+	case `\newline`, `\\`:
+		return parseCr(p)
 	case `\relax`:
 		return &Internal{Mode: p.mode}, p.advanceAndReturn()
 	case `\hspace`, `\hfill`:
