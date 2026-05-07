@@ -160,6 +160,20 @@ func handleAlignedEnv(p *Parser, name string) (Node, error) {
 		c := "c"
 		cols := []AlignSpec{{Type: AlignTypeAlign, Align: &c}}
 		gatherSep := "gather"
+		var tags []ArrayTag
+		// gather auto-numbers; gathered does not.
+		if base == "gather" && !strings.HasSuffix(name, "*") {
+			tags = make([]ArrayTag, len(rows))
+			for i := range tags {
+				p.equationCounter++
+				num := fmt.Sprintf("%d", p.equationCounter)
+				tags[i] = ArrayTag{Explicit: []Node{
+					&MathOrd{Mode: ModeMath, Text: "("},
+					&MathOrd{Mode: ModeMath, Text: num},
+					&MathOrd{Mode: ModeMath, Text: ")"},
+				}}
+			}
+		}
 		return &Array{
 			Mode:              p.mode,
 			Body:              rows,
@@ -169,6 +183,7 @@ func handleAlignedEnv(p *Parser, name string) (Node, error) {
 			AddJot:            boolPtr(true),
 			ColSeparationType: &gatherSep,
 			ArrayStretch:      1.0,
+			Tags:              tags,
 		}, nil
 	}
 

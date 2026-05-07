@@ -44,11 +44,14 @@ func parseHSpace(p *Parser) (Node, error) {
 // parseSpacingNode handles plain spacing commands that emit a SpacingNode
 // (\quad, \qquad, etc.) plus a few control-sequence names that the upstream
 // passes through as SpacingNode (\space, \nobreakspace).
+//
+// Note: the function form does not carry a loc — upstream sets loc:None on
+// these. (The symbol-table form, used for catcode-active characters like
+// `\,` resolved via parseSymbol, does carry loc.)
 func parseSpacingNode(p *Parser) (Node, error) {
-	tok := p.cur
+	cmd := p.cur.Text
 	p.advance()
-	loc := tok.Loc
-	return &Spacing{Mode: p.mode, Text: tok.Text, Loc: &loc}, nil
+	return &Spacing{Mode: p.mode, Text: cmd}, nil
 }
 
 // parseSizeGroup reads a size argument in either of two forms:

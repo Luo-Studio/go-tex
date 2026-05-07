@@ -140,7 +140,9 @@ func functionDispatch(p *Parser, callerName, breakOnText string) (Node, error) {
 		return parseHSpace(p)
 	case `\quad`, `\qquad`, `\enspace`, `\thinspace`, `\medspace`,
 		`\thickspace`, `\negthinspace`, `\negmedspace`, `\negthickspace`,
-		`\nobreakspace`, `\space`, `\allowbreak`, `\nobreak`, `\@`:
+		`\nobreakspace`:
+		// Function-form spacing: emit Spacing without loc, matching
+		// upstream spacing.rs handle_spacing.
 		return parseSpacingNode(p)
 	case `\tiny`, `\sixptsize`, `\scriptsize`, `\footnotesize`, `\small`,
 		`\normalsize`, `\large`, `\Large`, `\LARGE`, `\huge`, `\Huge`:
