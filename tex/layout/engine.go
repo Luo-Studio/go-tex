@@ -77,13 +77,50 @@ func layoutNode(n parser.Node, opts Options) *Box {
 			barThickness = measurementToEm(*v.BarSize, opts)
 		}
 		frac := layoutFraction(v.Numer, v.Denom, barThickness, v.Continued, opts)
-		// KaTeX wraps every \\frac/\\atop in mopen+mclose nulldelimiter spans
-		// of \\nulldelimiterspace each side (1.2pt = 0.12em).
-		if v.LeftDelim == nil && v.RightDelim == nil {
-			pad := 0.12
-			frac = makeHBox([]*Box{NewKern(pad), frac, NewKern(pad)}, opts.Color)
+		hasL := v.LeftDelim != nil && *v.LeftDelim != "" && *v.LeftDelim != "."
+		hasR := v.RightDelim != nil && *v.RightDelim != "" && *v.RightDelim != "."
+		if hasL || hasR {
+			// \binom/\brace/\brack/\dbinom: wrap in delim1/delim2 sized
+			// stretchy delimiters via a LeftRight box.
+			totalH := genfracDelimHeight(opts)
+			leftD := "."
+			rightD := "."
+			if v.LeftDelim != nil {
+				leftD = *v.LeftDelim
+			}
+			if v.RightDelim != nil {
+				rightD = *v.RightDelim
+			}
+			leftBox := makeStretchyDelim(leftD, totalH, opts)
+			rightBox := makeStretchyDelim(rightD, totalH, opts)
+			w := leftBox.Width + frac.Width + rightBox.Width
+			h := frac.Height
+			if leftBox.Height > h {
+				h = leftBox.Height
+			}
+			if rightBox.Height > h {
+				h = rightBox.Height
+			}
+			d := frac.Depth
+			if leftBox.Depth > d {
+				d = leftBox.Depth
+			}
+			if rightBox.Depth > d {
+				d = rightBox.Depth
+			}
+			return &Box{
+				Width: w, Height: h, Depth: d, Color: opts.Color,
+				Content: LeftRight{Left: leftBox, Right: rightBox, Inner: frac},
+			}
 		}
-		return frac
+		// KaTeX wraps bare \\frac/\\atop in mopen+mclose nulldelimiter spans
+		// of \\nulldelimiterspace each side (1.2pt = 0.12em).
+		pad := 0.12
+		rightPad := pad
+		if v.Continued {
+			rightPad = 0
+		}
+		return makeHBox([]*Box{NewKern(pad), frac, NewKern(rightPad)}, opts.Color)
 	case *parser.SupSub:
 		return layoutSupSubNode(v.Base, v.Sup, v.Sub, opts)
 	case *parser.Color:

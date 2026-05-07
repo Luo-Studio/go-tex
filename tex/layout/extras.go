@@ -532,6 +532,22 @@ func layoutUnderline(o *parser.Underline, opts Options) *Box {
 		Content: Underline{Body: body, RuleThickness: rt}}
 }
 
+// genfracDelimHeight returns the target stretchy delim height for
+// \binom/\brace/\brack/\dbinom (KaTeX HTML Rule 15e). Uses delim1 in
+// display, delim2 in text/script — and Script's delim2 in scriptscript.
+func genfracDelimHeight(opts Options) float64 {
+	m := opts.Metrics()
+	if opts.Style.IsDisplay() {
+		return m.Delim1
+	}
+	// scriptscript falls back to script's delim2.
+	// (We don't enumerate ScriptScript here because all metrics tables
+	// share the same delim values up to the size index — this matches
+	// upstream's logic of switching style metrics rather than the
+	// already-applied size.)
+	return m.Delim2
+}
+
 // layoutFramed handles \fbox / \fcolorbox / \colorbox: padded body
 // with optional bg fill + 4-rule border. Mirrors upstream layout_enclose.
 func layoutFramed(e *parser.Enclose, opts Options) *Box {
