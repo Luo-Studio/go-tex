@@ -188,21 +188,32 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 			Color:    b.Color,
 		})
 	case Radical:
-		// Surd glyph at left, baseline at body baseline.
+		// Surd left edge: shift right by max(0, index.Width*indexScale - surdW + 0.3)
+		// when index is present.
+		surdX := x
+		bodyX := x + c.IndexOffset*scale
+		if c.Index != nil {
+			extra := c.Index.Width*c.IndexScale - c.IndexOffset + 0.3
+			if extra > 0 {
+				surdX += extra * scale
+				bodyX += extra * scale
+			}
+			// Index above-left of surd. Approximate position.
+			indexX := x + 0.3*scale
+			indexY := y + c.RuleThickness*scale + c.Index.Height*scale*c.IndexScale
+			emit(c.Index, dl, indexX, indexY-c.Index.Height*scale*c.IndexScale, scale*c.IndexScale)
+		}
 		baselineY := y + b.Height*scale
 		dl.Items = append(dl.Items, GlyphPath{
-			X:        x,
+			X:        surdX,
 			Y:        baselineY,
 			Scale:    scale,
 			Font:     "Main-Regular",
 			CharCode: 0x221A,
 			Color:    b.Color,
 		})
-		// Body shifted right by the surd width (IndexOffset).
-		bodyX := x + c.IndexOffset*scale
 		bodyY := y + 4*c.RuleThickness*scale
 		emit(c.Body, dl, bodyX, bodyY, scale)
-		// Overline rule above the body.
 		dl.Items = append(dl.Items, Line{
 			X:         bodyX,
 			Y:         y + 2*c.RuleThickness*scale,

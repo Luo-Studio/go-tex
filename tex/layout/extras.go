@@ -328,11 +328,7 @@ func layoutAccentUnder(a *parser.AccentUnder, opts Options) *Box {
 }
 
 // layoutSqrt lays out `\sqrt[index]{body}`. Mirrors the simplified version
-// of upstream's layout_radical for the no-stretch case (small bodies).
-//
-// For tall bodies upstream uses Size1..Size4 stacked surd glyphs; we use
-// the Main-Regular U+221A glyph with the body height set to the inner
-// height + clearance.
+// of upstream's layout_radical.
 func layoutSqrt(s *parser.Sqrt, opts Options) *Box {
 	body := layoutNode(s.Body, opts.WithStyle(opts.Style.Cramped()))
 	rt := opts.Metrics().DefaultRuleThickness
@@ -340,22 +336,37 @@ func layoutSqrt(s *parser.Sqrt, opts Options) *Box {
 	if innerH == 0 {
 		innerH = opts.Metrics().XHeight
 	}
-	// Surd glyph metrics (U+221A in Main-Regular).
 	surdM, ok := fontmetrics.Lookup(fontmetrics.FontMainRegular, 0x221A)
 	surdW := 0.83334
 	if ok {
 		surdW = surdM.Width
 	}
+	var index *Box
+	indexScale := 0.5 // scriptscript style
+	if s.Index != nil {
+		idxOpts := opts.WithStyle(6) // ScriptScript
+		index = layoutNode(s.Index, idxOpts)
+	}
 	w := surdW + body.Width
+	if index != nil {
+		// Index sits above-left and may push out the surd start; for
+		// matching dim parity, reserve max(0, index.Width*scale - 0.5em).
+		offset := index.Width*indexScale - surdW + 0.3
+		if offset > 0 {
+			w += offset
+		}
+	}
 	h := innerH + 4*rt
 	d := body.Depth
 	return &Box{
 		Width: w, Height: h, Depth: d, Color: opts.Color,
 		Content: Radical{
 			Body:          body,
+			Index:         index,
 			RuleThickness: rt,
 			InnerHeight:   innerH,
 			IndexOffset:   surdW,
+			IndexScale:    indexScale,
 		},
 	}
 }
