@@ -166,15 +166,13 @@ func layoutNode(n parser.Node, opts Options) *Box {
 	case *parser.Array:
 		return layoutArray(v, opts)
 	case *parser.Enclose:
-		// Minimal Enclose: most labels just emit the body. \angl draws
-		// an actuarial-angle path (roof + right bar). \cancel/\bcancel/
-		// \xcancel/\sout overlay strike-through lines on the body.
-		// Background/border drawing for \fbox is not yet emitted.
 		switch v.Label {
 		case `\angl`:
 			return layoutAngl(v.Body, opts)
 		case `\cancel`, `\bcancel`, `\xcancel`, `\sout`:
 			return layoutCancel(v.Label, v.Body, opts)
+		case `\fbox`, `\fcolorbox`, `\colorbox`:
+			return layoutFramed(v, opts)
 		}
 		return layoutNode(v.Body, opts)
 	case *parser.HorizBrace:

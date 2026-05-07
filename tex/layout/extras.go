@@ -532,6 +532,141 @@ func layoutUnderline(o *parser.Underline, opts Options) *Box {
 		Content: Underline{Body: body, RuleThickness: rt}}
 }
 
+// layoutFramed handles \fbox / \fcolorbox / \colorbox: padded body
+// with optional bg fill + 4-rule border. Mirrors upstream layout_enclose.
+func layoutFramed(e *parser.Enclose, opts Options) *Box {
+	m := opts.Metrics()
+	padding := 3.0 / m.PtPerEm
+	borderThick := 0.4 / m.PtPerEm
+	hasBorder := e.Label == `\fbox` || e.Label == `\fcolorbox`
+
+	inner := layoutNode(e.Body, opts)
+	outerPad := padding
+	if hasBorder {
+		outerPad += borderThick
+	}
+	w := inner.Width + 2*outerPad
+	h := inner.Height + outerPad
+	d := inner.Depth + outerPad
+
+	bg := parseColorPtr(e.BackgroundColor)
+	bc := Black
+	if e.BorderColor != nil {
+		if c, ok := parseColor(*e.BorderColor); ok {
+			bc = c
+		}
+	}
+	return &Box{
+		Width: w, Height: h, Depth: d, Color: opts.Color,
+		Content: Framed{
+			Body:            inner,
+			Padding:         padding,
+			BorderThickness: borderThick,
+			HasBorder:       hasBorder,
+			BgColor:         bg,
+			BorderColor:     bc,
+		},
+	}
+}
+
+// parseColor / parseColorPtr resolve a CSS-style color name or hex
+// string. Currently a stub: only handles a few names + #RGB / #RRGGBB.
+func parseColor(s string) (Color, bool) {
+	if s == "" {
+		return Black, false
+	}
+	switch s {
+	case "black":
+		return Color{0, 0, 0, 255}, true
+	case "white":
+		return Color{255, 255, 255, 255}, true
+	case "red":
+		return Color{255, 0, 0, 255}, true
+	case "green":
+		return Color{0, 128, 0, 255}, true
+	case "blue":
+		return Color{0, 0, 255, 255}, true
+	case "yellow":
+		return Color{255, 255, 0, 255}, true
+	case "cyan", "aqua":
+		return Color{0, 255, 255, 255}, true
+	case "magenta", "fuchsia":
+		return Color{255, 0, 255, 255}, true
+	case "orange":
+		return Color{255, 165, 0, 255}, true
+	case "purple":
+		return Color{128, 0, 128, 255}, true
+	case "gray", "grey":
+		return Color{128, 128, 128, 255}, true
+	case "lime":
+		return Color{0, 255, 0, 255}, true
+	case "navy":
+		return Color{0, 0, 128, 255}, true
+	case "teal":
+		return Color{0, 128, 128, 255}, true
+	case "olive":
+		return Color{128, 128, 0, 255}, true
+	case "maroon":
+		return Color{128, 0, 0, 255}, true
+	case "silver":
+		return Color{192, 192, 192, 255}, true
+	}
+	if len(s) >= 4 && s[0] == '#' {
+		hex := s[1:]
+		parseHex := func(c byte) (uint8, bool) {
+			switch {
+			case c >= '0' && c <= '9':
+				return c - '0', true
+			case c >= 'a' && c <= 'f':
+				return c - 'a' + 10, true
+			case c >= 'A' && c <= 'F':
+				return c - 'A' + 10, true
+			}
+			return 0, false
+		}
+		var rgb [3]uint8
+		ok := true
+		switch len(hex) {
+		case 3:
+			for i := 0; i < 3; i++ {
+				v, vok := parseHex(hex[i])
+				if !vok {
+					ok = false
+					break
+				}
+				rgb[i] = v*16 + v
+			}
+		case 6:
+			for i := 0; i < 3; i++ {
+				hi, ok1 := parseHex(hex[2*i])
+				lo, ok2 := parseHex(hex[2*i+1])
+				if !ok1 || !ok2 {
+					ok = false
+					break
+				}
+				rgb[i] = hi*16 + lo
+			}
+		default:
+			ok = false
+		}
+		if ok {
+			return Color{rgb[0], rgb[1], rgb[2], 255}, true
+		}
+	}
+	return Black, false
+}
+
+func parseColorPtr(s *string) *Color {
+	if s == nil {
+		return nil
+	}
+	c, ok := parseColor(*s)
+	if !ok {
+		return nil
+	}
+	return &c
+}
+
 // sizingMultipliers maps KaTeX sizing keyword index (1-11) to a font
 // scale ratio. Mirrors upstream layout_sizing.
 var sizingMultipliers = []float64{

@@ -463,6 +463,36 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 		// Multiply current scale by child scale; child dims are in
 		// child em.
 		emit(c.Body, dl, x, y, scale*c.ChildScale)
+	case Framed:
+		// Bg fill (whole box), then 4 border rects (top/bottom/left/right),
+		// then body emitted at outer-baseline shifted right by padding.
+		outerW := b.Width * scale
+		outerHD := (b.Height + b.Depth) * scale
+		if c.BgColor != nil {
+			dl.Items = append(dl.Items, Rect{
+				X: x, Y: y, Width: outerW, Height: outerHD, Color: *c.BgColor,
+			})
+		}
+		if c.HasBorder {
+			bt := c.BorderThickness * scale
+			// Top
+			dl.Items = append(dl.Items, Rect{X: x, Y: y, Width: outerW, Height: bt, Color: c.BorderColor})
+			// Bottom
+			dl.Items = append(dl.Items, Rect{X: x, Y: y + outerHD - bt, Width: outerW, Height: bt, Color: c.BorderColor})
+			// Left
+			dl.Items = append(dl.Items, Rect{X: x, Y: y, Width: bt, Height: outerHD, Color: c.BorderColor})
+			// Right
+			dl.Items = append(dl.Items, Rect{X: x + outerW - bt, Y: y, Width: bt, Height: outerHD, Color: c.BorderColor})
+		}
+		// Body at outer.baseline (= y + b.Height*scale), shifted right by padding+border.
+		bodyOffsetEm := c.Padding
+		if c.HasBorder {
+			bodyOffsetEm += c.BorderThickness
+		}
+		// In our top-left convention, the body's top sits at outer.top + outer_pad*scale
+		// so its baseline lines up with the outer baseline.
+		bodyTopY := y + bodyOffsetEm*scale
+		emit(c.Body, dl, x+bodyOffsetEm*scale, bodyTopY, scale)
 	case RaiseBox:
 		// Positive Shift moves the body up. The wrapping box has
 		// Height = body.Height + Shift; emitting the body with its top
