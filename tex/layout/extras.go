@@ -340,11 +340,12 @@ func baseSkew(n parser.Node, opts Options) float64 {
 	case *parser.MathOrd:
 		text, mode = v.Text, parser.ModeMath
 	case *parser.OrdGroup:
-		// Single-symbol ord group inherits the symbol's skew.
-		if len(v.Body) == 1 {
-			return baseSkew(v.Body[0], opts)
+		// Multi-symbol ord group: take the LAST child's skew (mirrors
+		// upstream glyph_skew on an HBox).
+		if len(v.Body) == 0 {
+			return 0
 		}
-		return 0
+		return baseSkew(v.Body[len(v.Body)-1], opts)
 	default:
 		return 0
 	}
