@@ -284,9 +284,12 @@ func flattenPathToContours(commands []path.Command) [][][2]float64 {
 			x, y := cmd.X, cmd.Y
 			for k := 1; k <= N; k++ {
 				t := float64(k) / float64(N)
-				u := 1 - t
-				bx := u*u*u*x0 + 3*u*u*t*x1 + 3*u*t*t*x2 + t*t*t*x
-				by := u*u*u*y0 + 3*u*u*t*y1 + 3*u*t*t*y2 + t*t*t*y
+				u := 1.0 - t
+				// Mirror Rust evaluation order exactly:
+				//   u * u * u * x0 + 3.0 * u * u * t * x1 + 3.0 * u * t * t * x2 + t * t * t * x
+				// Go evaluates left-to-right, same as Rust.
+				bx := u*u*u*x0 + 3.0*u*u*t*x1 + 3.0*u*t*t*x2 + t*t*t*x
+				by := u*u*u*y0 + 3.0*u*u*t*y1 + 3.0*u*t*t*y2 + t*t*t*y
 				last = [2]float64{bx, by}
 				current = append(current, last)
 			}

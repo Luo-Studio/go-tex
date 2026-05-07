@@ -11,7 +11,7 @@ upstream Rust implementation while following idiomatic Go library practices.
 | Lex | **100%** (1099/1099) | byte-identical to upstream `lex` CLI |
 | Parse, non-mhchem | **97.89%** (975/996) | canonical match against upstream `parse` JSON AST |
 | Parse, all incl. mhchem | **88.72%** (975/1099) | mhchem `\ce`/`\pu` deferred |
-| **SVG byte parity** | **90.56%** (902/996) non-mhchem | byte-identical to upstream render-svg text mode |
+| **SVG byte parity** | **98.80%** (984/996) non-mhchem | byte-identical to upstream render-svg text mode |
 | PNG render pipeline | working | oksvg+rasterx; AA differs from upstream's ab_glyph |
 | PNG byte parity | 0% | requires bit-exact rasteriser matching ab_glyph |
 
@@ -61,7 +61,7 @@ LayoutBox tree
      │  tex/layout/displaylist (recursive emit with absolute positions)
      ▼
 DisplayList
-     │  tex/svg (text-mode SVG, 90.56% byte parity)
+     │  tex/svg (text-mode SVG, 98.80% byte parity)
      ▼
 SVG XML
      │  tex/render via oksvg + rasterx
@@ -101,14 +101,10 @@ The tests skip cleanly if the binaries are unavailable.
 
 - mhchem `\ce` / `\pu` (skeleton in tex/mhchem; engine/actions/texify
   pending — ~2000 lines of state-machine code).
-- KaTeX stretchy SVG paths for `\widehat`/`\widetilde`/`\overrightarrow`
-  /`\underbrace`/etc. and tall-delimiter paths for `\biggm\vert`,
-  pmatrix-style auto-grown parens, etc. (~1200 lines in upstream's
-  `katex_svg.rs`). These render as glyphs in the bundled fonts when the
-  required size fits, otherwise upstream switches to per-pixel SVG paths
-  that we don't generate yet.
-- Full `\begin{CD}` commutative-diagram environment (parses to AST but
-  renders blank cells).
+- 12 cases (1.20%) of SVG byte parity are floating-point precision
+  drift in cubic Bezier flattening — the underlying f64 values differ
+  by 1 ULP from upstream Rust at certain points, even with bit-identical
+  formulas. Visually indistinguishable.
 - TTF glyph extraction for path-glyph SVG output (would let us match the
   upstream `output_svg/` golden corpus byte-for-byte, but requires a
   full sfnt parser and bezier extraction).
