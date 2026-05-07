@@ -44,7 +44,6 @@ go-tex/
 │   ├── pdf/                  display list -> PDF via codeberg.org/go-pdf/fpdf
 │   └── mhchem/               (skeleton) mhchem state machine port
 ├── internal/parity/          test-time finder for upstream binaries
-├── reference/ratex/          verbatim upstream Rust src (porting reference)
 └── testdata/golden/          upstream golden corpus
 ```
 
