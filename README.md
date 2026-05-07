@@ -33,12 +33,15 @@ go-tex/
 │   ├── parser/               parser, AST, function registry, environments
 │   ├── symbols/              KaTeX symbols table (1876 entries)
 │   ├── fontmetrics/          KaTeX font metrics tables (19 fonts)
+│   ├── fonts/                embedded KaTeX TTFs + loader
 │   ├── mathstyle/            TeX style transitions
 │   ├── path/                 SVG path commands
 │   ├── source/               source-location helper
 │   ├── layout/               box layout engine + display list
 │   ├── svg/                  display list -> SVG XML
-│   ├── render/               SVG -> PNG via oksvg + rasterx
+│   ├── canvasr/              display list -> tdewolff/canvas (PNG/SVG/EPS)
+│   ├── render/               display list -> PNG via canvasr + rasterizer
+│   ├── pdf/                  display list -> PDF via codeberg.org/go-pdf/fpdf
 │   └── mhchem/               (skeleton) mhchem state machine port
 ├── internal/parity/          test-time finder for upstream binaries
 ├── reference/ratex/          verbatim upstream Rust src (porting reference)
@@ -61,12 +64,17 @@ LayoutBox tree
      │  tex/layout/displaylist (recursive emit with absolute positions)
      ▼
 DisplayList
-     │  tex/svg (text-mode SVG, 98.80% byte parity)
-     ▼
-SVG XML
-     │  tex/render via oksvg + rasterx
-     ▼
-PNG bytes
+     │       ├─ tex/svg (text-mode SVG, 98.80% byte parity)
+     │       │       ▼
+     │       │  SVG XML
+     │       │
+     │       ├─ tex/render (PNG via tdewolff/canvas + embedded KaTeX TTFs)
+     │       │       ▼
+     │       │  PNG bytes
+     │       │
+     │       └─ tex/pdf (PDF via go-pdf/fpdf + embedded KaTeX TTFs)
+     │               ▼
+     │          PDF bytes
 ```
 
 ## Comparison to go-latex/latex
