@@ -463,6 +463,13 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 		// Multiply current scale by child scale; child dims are in
 		// child em.
 		emit(c.Body, dl, x, y, scale*c.ChildScale)
+	case RaiseBox:
+		// Positive Shift moves the body up. The wrapping box has
+		// Height = body.Height + Shift; emitting the body with its top
+		// at y places its baseline at y + body.Height, which equals
+		// (y + Box.Height - Shift), i.e. raised by Shift relative to
+		// the box's baseline.
+		emit(c.Body, dl, x, y, scale)
 	case Angl:
 		// Body shares baseline at y + b.Height*scale. Path commands are
 		// in body-relative em with y measured from baseline (negative =

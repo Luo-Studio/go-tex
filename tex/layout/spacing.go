@@ -73,6 +73,26 @@ func nodeMathClass(n parser.Node) (MathClass, bool) {
 		case parser.FamilyRel:
 			return ClassRel, true
 		}
+	case *parser.MClass:
+		// \mathrel{...} / \mathbin{...} / etc. force the wrapped body to
+		// be classified as the named class for outer spacing.
+		switch v.Mclass {
+		case "mrel":
+			return ClassRel, true
+		case "mbin":
+			return ClassBin, true
+		case "mopen":
+			return ClassOpen, true
+		case "mclose":
+			return ClassClose, true
+		case "mpunct":
+			return ClassPunct, true
+		case "minner":
+			return ClassInner, true
+		case "mop":
+			return ClassOp, true
+		}
+		return ClassOrd, true
 	case *parser.MathOrd, *parser.TextOrd, *parser.AccentToken,
 		*parser.OrdGroup, *parser.SupSub, *parser.GenFrac, *parser.Sqrt,
 		*parser.Accent, *parser.AccentUnder, *parser.Font, *parser.Color,
@@ -80,7 +100,7 @@ func nodeMathClass(n parser.Node) (MathClass, bool) {
 		*parser.Underline, *parser.Rule, *parser.Lap, *parser.RaiseBox,
 		*parser.HBox, *parser.MathChoice, *parser.HtmlMathMl,
 		*parser.Enclose, *parser.Pmb, *parser.Href, *parser.URL,
-		*parser.HorizBrace, *parser.VCenter, *parser.MClass:
+		*parser.HorizBrace, *parser.VCenter:
 		return ClassOrd, true
 	case *parser.OpToken, *parser.Op, *parser.OperatorName:
 		return ClassOp, true

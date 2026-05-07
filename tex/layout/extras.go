@@ -101,7 +101,28 @@ func measurementToEm(m parser.Measurement, opts Options) float64 {
 // (\lim, \sin, …) emit the function name in upright Main-Regular.
 func layoutOp(op *parser.Op, opts Options) *Box {
 	if op.Body != nil && len(op.Body) > 0 {
-		return layoutExpression(op.Body, opts, true)
+		body := layoutExpression(op.Body, opts, true)
+		// User-defined \mathop{content} (e.g. \vcentcolon): center the
+		// content on the math axis via a RaiseBox so the glyph
+		// physically moves up. Mirrors upstream layout_op.
+		axis := opts.Metrics().AxisHeight
+		delta := (body.Height-body.Depth)/2 - axis
+		if delta > 0.001 || delta < -0.001 {
+			raise := -delta
+			h := body.Height + raise
+			if h < 0 {
+				h = 0
+			}
+			d := body.Depth - raise
+			if d < 0 {
+				d = 0
+			}
+			return &Box{
+				Width: body.Width, Height: h, Depth: d, Color: opts.Color,
+				Content: RaiseBox{Body: body, Shift: raise},
+			}
+		}
+		return body
 	}
 	if op.Name == nil {
 		return NewEmpty()
