@@ -9,11 +9,13 @@ upstream Rust implementation while following idiomatic Go library practices.
 | Stage | Score vs upstream RaTeX | Notes |
 |-------|-------------------------|-------|
 | Lex | **100%** (1099/1099) | byte-identical to upstream `lex` CLI |
-| Parse, non-mhchem | **97.89%** (975/996) | canonical match against upstream `parse` JSON AST |
-| Parse, all incl. mhchem | **88.72%** (975/1099) | mhchem `\ce`/`\pu` deferred |
-| **SVG byte parity** | **98.80%** (984/996) non-mhchem | byte-identical to upstream render-svg text mode |
-| PNG render pipeline | working | oksvg+rasterx; AA differs from upstream's ab_glyph |
-| PNG byte parity | 0% | requires bit-exact rasteriser matching ab_glyph |
+| Parse, non-mhchem | **99.00%** (986/996) | byte-identical against upstream `parse` JSON AST |
+| Parse, mhchem (`\ce`, `\pu`) | **100%** (103/103) | full state-machine port, byte-identical |
+| **Parse, overall** | **99.09%** (1089/1099) | combined |
+| SVG byte parity, non-mhchem | **99.00%** (986/996) | byte-identical to upstream render-svg text mode |
+| SVG byte parity, mhchem | **98.06%** (101/103) | |
+| PNG render pipeline | working | tdewolff/canvas + embedded KaTeX TTFs |
+| PDF render pipeline | working | go-pdf/fpdf + embedded KaTeX TTFs |
 
 The headline score is **byte-equivalence of textual outputs** (token streams,
 JSON ASTs, SVG XML) rather than pixel-equivalence of rasterised PNGs. Pixel
@@ -42,7 +44,7 @@ go-tex/
 │   ├── canvasr/              display list -> tdewolff/canvas (PNG/SVG/EPS)
 │   ├── render/               display list -> PNG via canvasr + rasterizer
 │   ├── pdf/                  display list -> PDF via codeberg.org/go-pdf/fpdf
-│   └── mhchem/               (skeleton) mhchem state machine port
+│   └── mhchem/               KaTeX mhchem 3.3.0 (\ce, \pu) state machine
 ├── internal/parity/          test-time finder for upstream binaries
 └── testdata/golden/          upstream golden corpus
 ```
@@ -54,7 +56,7 @@ LaTeX source
      │  tex/lexer (100% upstream parity)
      ▼
 Tokens
-     │  tex/macroexp + tex/parser (97.89% non-mhchem)
+     │  tex/macroexp + tex/parser (99.00% non-mhchem, 100% mhchem)
      ▼
 ParseNode AST
      │  tex/layout + tex/fontmetrics
@@ -63,7 +65,7 @@ LayoutBox tree
      │  tex/layout/displaylist (recursive emit with absolute positions)
      ▼
 DisplayList
-     │       ├─ tex/svg (text-mode SVG, 98.80% byte parity)
+     │       ├─ tex/svg (text-mode SVG, 99.00% byte parity)
      │       │       ▼
      │       │  SVG XML
      │       │
@@ -106,12 +108,12 @@ The tests skip cleanly if the binaries are unavailable.
 
 ## Not yet ported
 
-- mhchem `\ce` / `\pu` (skeleton in tex/mhchem; engine/actions/texify
-  pending — ~2000 lines of state-machine code).
-- 12 cases (1.20%) of SVG byte parity are floating-point precision
-  drift in cubic Bezier flattening — the underlying f64 values differ
-  by 1 ULP from upstream Rust at certain points, even with bit-identical
-  formulas. Visually indistinguishable.
+- 10 cases (1.00%) of non-mhchem parse parity remain. Mostly individual
+  function-shape mismatches; mhchem itself is 100%.
+- A few cases of SVG byte parity are floating-point precision drift in
+  cubic Bezier flattening — the underlying f64 values differ by 1 ULP
+  from upstream Rust at certain points, even with bit-identical formulas.
+  Visually indistinguishable.
 - TTF glyph extraction for path-glyph SVG output (would let us match the
   upstream `output_svg/` golden corpus byte-for-byte, but requires a
   full sfnt parser and bezier extraction).

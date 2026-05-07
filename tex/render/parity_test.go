@@ -2,34 +2,36 @@ package render
 
 import (
 	"bufio"
-	"bytes"
 	"image/png"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
+
+	"bytes"
 
 	"github.com/luo-studio/go-tex/tex/layout"
 	"github.com/luo-studio/go-tex/tex/parser"
 )
 
 // TestPNGStructuralParity is a sanity harness: for each golden case,
-// render via parser→layout→canvasr→PNG, decode the upstream reference
-// PNG, and report:
+// render via parser→layout→canvasr→PNG, decode upstream's reference SVG
+// to read its dimensions, and report:
 //
-//   - byte-identical: how many output PNGs are byte-for-byte equal to
-//     upstream (very unlikely without ab_glyph rasteriser parity).
-//   - dim-match: how many have the same pixel dimensions as upstream.
-//   - first failure example.
+//   - decoded: how many of our PNGs decode successfully.
+//   - dim-match: how many have the same pixel dimensions as upstream
+//     (SVG width/height rounded to nearest integer pixel).
 //
-// Pixel-identical PNGs require porting ab_glyph's rasteriser. This
-// test sets the floor and shows that the renderer pipeline is
-// end-to-end functional (PNGs decode, dimensions match SVG output).
+// We dropped PNG goldens — bit-exact PNG comparison is infeasible without
+// porting ab_glyph's rasteriser, and dimensions are equally available
+// from the SVG corpus.
 func TestPNGStructuralParity(t *testing.T) {
 	corpusPath := filepath.Join("..", "..", "testdata", "golden", "test_cases.txt")
-	goldenDir := filepath.Join("..", "..", "testdata", "golden", "output")
+	goldenDir := filepath.Join("..", "..", "testdata", "golden", "output_svg")
 	if _, err := os.Stat(goldenDir); err != nil {
-		t.Skip("golden output dir not present")
+		t.Skip("golden output_svg dir not present")
 	}
 	f, err := os.Open(corpusPath)
 	if err != nil {
@@ -40,7 +42,7 @@ func TestPNGStructuralParity(t *testing.T) {
 	s := bufio.NewScanner(f)
 	s.Buffer(make([]byte, 1<<16), 1<<20)
 	idx := 0
-	byteMatch, dimMatch, decoded, total := 0, 0, 0, 0
+	dimMatch, decoded, total := 0, 0, 0
 	var firstFailure string
 	for s.Scan() {
 		expr := strings.TrimSpace(s.Text())
@@ -63,23 +65,22 @@ func TestPNGStructuralParity(t *testing.T) {
 			continue
 		}
 		decoded++
-		wantPath := filepath.Join(goldenDir, formatIdx(idx)+".png")
+		ow, ohErr := pngDims(ours)
+		if ohErr != nil {
+			continue
+		}
+		wantPath := filepath.Join(goldenDir, formatIdx(idx)+".svg")
 		want, err := os.ReadFile(wantPath)
 		if err != nil {
 			continue
 		}
-		if bytes.Equal(ours, want) {
-			byteMatch++
-		}
-		ow, ohErr := pngDims(ours)
-		ww, whErr := pngDims(want)
-		if ohErr == nil && whErr == nil && ow == ww {
+		ww, whErr := svgDims(want)
+		if whErr == nil && ow == ww {
 			dimMatch++
 		}
 	}
-	t.Logf("PNG: %d cases  decoded %d  dim-match %d (%.2f%%)  byte-identical %d (%.2f%%)\nfirst failure: %q",
-		total, decoded, dimMatch, percent(dimMatch, total),
-		byteMatch, percent(byteMatch, total), firstFailure)
+	t.Logf("PNG: %d cases  decoded %d  dim-match %d (%.2f%%)\nfirst failure: %q",
+		total, decoded, dimMatch, percent(dimMatch, total), firstFailure)
 }
 
 func formatIdx(i int) string {
@@ -106,4 +107,18 @@ func pngDims(b []byte) (pngWH, error) {
 		return pngWH{}, err
 	}
 	return pngWH{cfg.Width, cfg.Height}, nil
+}
+
+var reSVGW = regexp.MustCompile(`width="([0-9.]+)"`)
+var reSVGH = regexp.MustCompile(`height="([0-9.]+)"`)
+
+func svgDims(b []byte) (pngWH, error) {
+	wm := reSVGW.FindSubmatch(b)
+	hm := reSVGH.FindSubmatch(b)
+	if wm == nil || hm == nil {
+		return pngWH{}, os.ErrInvalid
+	}
+	wf, _ := strconv.ParseFloat(string(wm[1]), 64)
+	hf, _ := strconv.ParseFloat(string(hm[1]), 64)
+	return pngWH{int(wf + 0.5), int(hf + 0.5)}, nil
 }

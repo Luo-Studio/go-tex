@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/luo-studio/go-tex/tex/lexer"
 	"github.com/luo-studio/go-tex/tex/macroexp"
@@ -51,7 +52,7 @@ var implicitCommands = map[string]struct{}{
 // Parse parses a LaTeX math input string into the top-level body. It is the
 // public entry point matching upstream `parse(&str)`.
 func Parse(input string) ([]Node, error) {
-	p := newParser(input)
+	p := newParser(stripOuterMathDelimiters(input))
 	body, err := p.parseExpression(false, "")
 	if err != nil {
 		return nil, err
@@ -60,6 +61,21 @@ func Parse(input string) ([]Node, error) {
 		return nil, errAt(fmt.Sprintf("Expected EOF, got %q", p.cur.Text), p.cur)
 	}
 	return body, nil
+}
+
+// stripOuterMathDelimiters removes a single layer of `$...$` or `$$...$$`
+// inline-math delimiters from the input. Upstream's parse() does this so
+// authors can pass either form to the math-mode parser without the
+// outermost dollar-toggle producing a stray Styling node.
+func stripOuterMathDelimiters(input string) string {
+	s := strings.TrimSpace(input)
+	if len(s) >= 4 && strings.HasPrefix(s, "$$") && strings.HasSuffix(s, "$$") {
+		return strings.TrimSpace(s[2 : len(s)-2])
+	}
+	if len(s) >= 2 && strings.HasPrefix(s, "$") && strings.HasSuffix(s, "$") {
+		return strings.TrimSpace(s[1 : len(s)-1])
+	}
+	return input
 }
 
 // Parser holds the recursive-descent state. Construct with newParser.

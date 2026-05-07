@@ -245,4 +245,7 @@ var builtinTextMacros = map[string]string{
 	`\angln`: `{\angl n}`,
 	`\set`: `\bra@set{\{\,}{\mid}{}{\,\}}`,
 	`\Set`: `\bra@set{\left\{\:}{\;\middle\vert\;}{\;\middle\Vert\;}{\:\right\}}`,
+
+	// KaTeX mhchem: \tripledash is used internally by \bond{~}, \bond{~-}, etc.
+	`\tripledash`: `{\vphantom{-}\raisebox{2.56mu}{$\mkern2mu\tiny\text{-}\mkern1mu\text{-}\mkern1mu\text{-}\mkern2mu$}}`,
 }

@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/luo-studio/go-tex/tex/lexer"
+	"github.com/luo-studio/go-tex/tex/mhchem"
 )
 
 // Mode mirrors parser.Mode without an import cycle.
@@ -343,6 +344,49 @@ func lexBodySource(text string) []lexer.Token {
 	return toks
 }
 
+// handleMhchem implements \ce / \pu. The single brace argument is parsed
+// through the mhchem state machine; the resulting TeX is re-lexed and
+// pushed back onto the macro stack.
+//
+// Unlike consumeArgs (which concatenates token texts and so loses any
+// whitespace between control sequences), this rebuilds the source string
+// from each token's Loc, inserting a space wherever the next token starts
+// past where the previous one ended. Mirrors upstream
+// `mhchem_arg_tokens_to_string`.
+func handleMhchem(mode string) FnMacro {
+	return func(e *Expander) ([]lexer.Token, error) {
+		args, err := e.consumeArgsAsTokens(1)
+		if err != nil {
+			return nil, err
+		}
+		src := mhchemSourceFromTokens(args[0])
+		tex, err := mhchem.ChemParseStr(src, mode)
+		if err != nil {
+			return nil, fmt.Errorf("\\%s: %w", mode, err)
+		}
+		return lexAll(tex), nil
+	}
+}
+
+// mhchemSourceFromTokens reconstructs the original source string of a
+// brace argument from its token list, inserting a space wherever the
+// source has a gap (e.g. the trailing space after a control sequence).
+func mhchemSourceFromTokens(toks []lexer.Token) string {
+	if len(toks) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	expected := toks[0].Loc.Start
+	for _, t := range toks {
+		if t.Loc.Start > expected {
+			b.WriteByte(' ')
+		}
+		b.WriteString(t.Text)
+		expected = t.Loc.End
+	}
+	return b.String()
+}
+
 // lexAll lexes text and returns its tokens in stack order (i.e. reversed).
 func lexAll(text string) []lexer.Token {
 	l := lexer.New(text)
@@ -409,6 +453,8 @@ func defaultMacros() map[string]Definition {
 	m[`\htmlId`] = Definition{Fn: htmlPass}
 	m[`\htmlStyle`] = Definition{Fn: htmlPass}
 	m[`\char`] = Definition{Fn: handleChar}
+	m[`\ce`] = Definition{Fn: handleMhchem("ce")}
+	m[`\pu`] = Definition{Fn: handleMhchem("pu")}
 	// Text-form alias: \operatorname → \@ifstar\operatornamewithlimits\operatorname@
 	m[`\operatorname`] = Definition{Text: `\@ifstar\operatornamewithlimits\operatorname@`}
 	// \char: parse a number in decimal/octal/hex/backtick form and emit

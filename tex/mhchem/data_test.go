@@ -40,9 +40,24 @@ func TestBuffer(t *testing.T) {
 	}
 }
 
-func TestChemParseStrStub(t *testing.T) {
-	_, err := ChemParseStr("H2O", "ce")
-	if err != ErrNotImplemented {
-		t.Errorf("ChemParseStr returned %v, want ErrNotImplemented", err)
+func TestChemParseStrSmoke(t *testing.T) {
+	out, err := ChemParseStr("H2O", "ce")
+	if err != nil {
+		t.Fatalf("ChemParseStr: %v", err)
 	}
+	if out == "" {
+		t.Fatal("ChemParseStr returned empty string")
+	}
+	if !contains(out, "H") {
+		t.Errorf("output %q doesn't contain 'H'", out)
+	}
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
 }

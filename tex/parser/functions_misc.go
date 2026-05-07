@@ -3,6 +3,8 @@ package parser
 import (
 	"fmt"
 	"strings"
+
+	"github.com/luo-studio/go-tex/tex/source"
 )
 
 // =============================================================================
@@ -384,15 +386,30 @@ func parseXArrow(p *Parser) (Node, error) {
 	p.consumeSpaces()
 	var below Node
 	if p.cur.Text == "[" {
+		openTok := p.cur
 		p.advance()
-		body, err := p.parseExpression(false, "]")
+		// Match upstream: parse one group (a brace group or a single
+		// symbol) rather than a full expression. This ensures
+		// `[{X}]` produces ordgroup{X} (not ordgroup{[ordgroup{X}]}).
+		body, err := p.parseGroup(cmd, "")
 		if err != nil {
 			return nil, err
 		}
+		if body == nil {
+			body = &OrdGroup{Mode: p.mode}
+		}
+		closeTok := p.cur
 		if err := p.expect("]"); err != nil {
 			return nil, err
 		}
-		below = &OrdGroup{Mode: p.mode, Body: body}
+		// Below's location spans `[...]` inclusive, matching upstream.
+		loc := source.Range(openTok.Loc, closeTok.Loc)
+		if og, ok := body.(*OrdGroup); ok {
+			og.Loc = &loc
+			below = og
+		} else {
+			below = &OrdGroup{Mode: p.mode, Body: []Node{body}, Loc: &loc}
+		}
 	}
 	body, err := parseFunctionArg(p, cmd)
 	if err != nil {
