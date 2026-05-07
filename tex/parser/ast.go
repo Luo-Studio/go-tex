@@ -314,7 +314,12 @@ func (o *OrdGroup) NodeType() string { return "ordgroup" }
 func (o *OrdGroup) NodeMode() Mode   { return o.Mode }
 func (o *OrdGroup) MarshalJSON() ([]byte, error) {
 	type alias OrdGroup
-	return withType("ordgroup", (*alias)(o))
+	// An empty body must serialise as `[]`, never `null` (matches upstream).
+	a := *o
+	if a.Body == nil {
+		a.Body = []Node{}
+	}
+	return withType("ordgroup", (*alias)(&a))
 }
 
 // SupSub holds a base with optional super- and subscript.

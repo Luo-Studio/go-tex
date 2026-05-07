@@ -66,12 +66,163 @@ func envHandler(p *Parser, name string) (Node, error) {
 	switch base {
 	case "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix":
 		return handleMatrixEnv(p, name, base)
+	case "smallmatrix":
+		return handleSmallMatrixEnv(p, name)
 	case "cases", "dcases", "rcases", "drcases":
 		return handleCasesEnv(p, name)
 	case "array", "darray":
 		return handleArrayEnv(p, name, base)
+	case "align", "aligned", "split", "alignat", "alignedat",
+		"equation", "gather", "gathered":
+		return handleAlignedEnv(p, name)
+	case "subarray":
+		return handleSubarrayEnv(p, name)
 	}
 	return nil, errAt(fmt.Sprintf("No such environment: %s", name), p.cur)
+}
+
+func handleSmallMatrixEnv(p *Parser, name string) (Node, error) {
+	rows, rowGaps, err := parseArrayBody(p, StyleScript)
+	if err != nil {
+		return nil, err
+	}
+	cols := arrayCenterCols(rowMaxCols(rows))
+	return &Array{
+		Mode:              p.mode,
+		Body:              rows,
+		RowGaps:           rowGaps,
+		HLinesBeforeRow:   buildEmptyHLines(len(rows)),
+		Cols:              cols,
+		HskipBeforeAndAft: boolPtr(false),
+		ArrayStretch:      0.5,
+	}, nil
+}
+
+func handleAlignedEnv(p *Parser, name string) (Node, error) {
+	base := strings.TrimSuffix(name, "*")
+	isAlignat := strings.Contains(base, "at")
+	isGather := base == "gather" || base == "gathered"
+	isEquation := base == "equation"
+
+	// alignat / alignedat take a {N} argument for column count. We read it
+	// (and currently ignore it; it's only used to validate column counts).
+	if isAlignat {
+		p.consumeSpaces()
+		if p.cur.Text == "{" {
+			depth := 1
+			p.advance()
+			for !p.cur.IsEOF() && depth > 0 {
+				if p.cur.Text == "{" {
+					depth++
+				} else if p.cur.Text == "}" {
+					depth--
+				}
+				if depth > 0 {
+					p.advance()
+				}
+			}
+			if p.cur.Text == "}" {
+				p.advance()
+			}
+		}
+	}
+
+	rows, rowGaps, err := parseArrayBody(p, StyleDisplay)
+	if err != nil {
+		return nil, err
+	}
+
+	if isGather || isEquation {
+		// Single centred column.
+		c := "c"
+		cols := []AlignSpec{{Type: AlignTypeAlign, Align: &c}}
+		return &Array{
+			Mode:            p.mode,
+			Body:            rows,
+			RowGaps:         rowGaps,
+			HLinesBeforeRow: buildEmptyHLines(len(rows)),
+			Cols:            cols,
+			AddJot:          boolPtr(false),
+			ArrayStretch:    1.0,
+		}, nil
+	}
+
+	// align / aligned / split / alignat / alignedat:
+	// upstream prepends an empty ordgroup at the start of every even-indexed
+	// cell (2nd, 4th, …) and computes alternating r-l columns.
+	for _, row := range rows {
+		for i := 1; i < len(row); i += 2 {
+			if styled, ok := row[i].(*Styling); ok && len(styled.Body) > 0 {
+				if og, ok2 := styled.Body[0].(*OrdGroup); ok2 {
+					og.Body = append([]Node{&OrdGroup{Mode: p.mode}}, og.Body...)
+				}
+			}
+		}
+	}
+	numCols := rowMaxCols(rows)
+	cols := make([]AlignSpec, numCols)
+	zero, one := 0.0, 1.0
+	isAligned := !isAlignat
+	for i := 0; i < numCols; i++ {
+		var align string
+		var pregap *float64
+		if i%2 == 1 {
+			align = "l"
+			pregap = &zero
+		} else if i > 0 && isAligned {
+			align = "r"
+			pregap = &one
+		} else {
+			align = "r"
+			pregap = &zero
+		}
+		al := align
+		cols[i] = AlignSpec{Type: AlignTypeAlign, Align: &al, Pregap: pregap, Postgap: &zero}
+	}
+	sepType := "align"
+	if isAlignat {
+		sepType = "alignat"
+	}
+	return &Array{
+		Mode:              p.mode,
+		Body:              rows,
+		RowGaps:           rowGaps,
+		HLinesBeforeRow:   buildEmptyHLines(len(rows)),
+		AddJot:            boolPtr(true),
+		Cols:              cols,
+		ColSeparationType: &sepType,
+		ArrayStretch:      1.0,
+	}, nil
+}
+
+func handleSubarrayEnv(p *Parser, name string) (Node, error) {
+	// Read column spec.
+	p.consumeSpaces()
+	if p.cur.Text != "{" {
+		return nil, errAt("Expected column spec after \\begin{subarray}", p.cur)
+	}
+	p.advance()
+	var spec strings.Builder
+	for !p.cur.IsEOF() && p.cur.Text != "}" {
+		spec.WriteString(p.cur.Text)
+		p.advance()
+	}
+	if p.cur.Text == "}" {
+		p.advance()
+	}
+	cols := parseColumnSpec(spec.String())
+	rows, rowGaps, err := parseArrayBody(p, StyleScript)
+	if err != nil {
+		return nil, err
+	}
+	return &Array{
+		Mode:            p.mode,
+		Body:            rows,
+		RowGaps:         rowGaps,
+		HLinesBeforeRow: buildEmptyHLines(len(rows)),
+		Cols:            cols,
+		ArrayStretch:    0.5,
+	}, nil
 }
 
 // dCellStyle returns "display" if env name starts with 'd', else "text".
