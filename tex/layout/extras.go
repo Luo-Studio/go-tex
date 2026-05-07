@@ -131,6 +131,24 @@ func layoutOperatorName(op *parser.OperatorName, opts Options) *Box {
 	return layoutTextBody(op.Body, textOpts)
 }
 
+// sizeToMaxHeight gives the fixed total height for \\big/\\Big/\\bigg/\\Bigg.
+var sizeToMaxHeight = []float64{0, 1.2, 1.8, 2.4, 3.0}
+
+// layoutDelimSizing handles \\big(, \\Bigl{, \\Bigm|, etc.
+func layoutDelimSizing(d *parser.DelimSizing, opts Options) *Box {
+	if d.Delim == "." || d.Delim == "" {
+		return NewKern(0)
+	}
+	if _, ok := delimChar(d.Delim); !ok {
+		return NewKern(0)
+	}
+	totalH := sizeToMaxHeight[1]
+	if int(d.Size) >= 0 && int(d.Size) < len(sizeToMaxHeight) {
+		totalH = sizeToMaxHeight[d.Size]
+	}
+	return makeStretchyDelim(d.Delim, totalH, opts)
+}
+
 // layoutOpSymbol lays out a symbol op (e.g. \\sum, \\int) using the
 // Size1/Size2 font for the glyph (Size2 in displaystyle).
 func layoutOpSymbol(name string, opts Options) *Box {
