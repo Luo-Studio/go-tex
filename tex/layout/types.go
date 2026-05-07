@@ -7,6 +7,7 @@
 package layout
 
 import (
+	"github.com/luo-studio/go-tex/tex/fontmetrics"
 	"github.com/luo-studio/go-tex/tex/mathstyle"
 	"github.com/luo-studio/go-tex/tex/parser"
 	"github.com/luo-studio/go-tex/tex/path"
@@ -38,6 +39,11 @@ func DefaultOptions() Options {
 
 // SizeMultiplier returns the size multiplier for the current style.
 func (o Options) SizeMultiplier() float64 { return o.Style.SizeMultiplier() }
+
+// Metrics returns the math constants for the current style's size index.
+func (o Options) Metrics() *fontmetrics.MathConstants {
+	return fontmetrics.Global(o.Style.SizeIndex())
+}
 
 // WithStyle returns a copy of o with style replaced.
 func (o Options) WithStyle(s mathstyle.Style) Options { o.Style = s; return o }
