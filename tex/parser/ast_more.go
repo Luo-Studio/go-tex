@@ -697,6 +697,51 @@ func (n *NoNumber) MarshalJSON() ([]byte, error) {
 	return withType("nonumber", (*alias)(n))
 }
 
+// CdArrow is one cell inside a `\begin{CD}` ... `\end{CD}` environment.
+type CdArrow struct {
+	Mode       Mode   `json:"mode"`
+	Direction  string `json:"direction"`
+	LabelAbove Node   `json:"label_above,omitempty"`
+	LabelBelow Node   `json:"label_below,omitempty"`
+	Loc        Loc    `json:"loc,omitempty"`
+}
+
+func (c *CdArrow) NodeType() string { return "cdArrow" }
+func (c *CdArrow) NodeMode() Mode   { return c.Mode }
+func (c *CdArrow) MarshalJSON() ([]byte, error) {
+	type alias CdArrow
+	return withType("cdArrow", (*alias)(c))
+}
+
+// CdLabel is the label for a CD arrow.
+type CdLabel struct {
+	Mode  Mode   `json:"mode"`
+	Side  string `json:"side"`
+	Label Node   `json:"label"`
+	Loc   Loc    `json:"loc,omitempty"`
+}
+
+func (c *CdLabel) NodeType() string { return "cdlabel" }
+func (c *CdLabel) NodeMode() Mode   { return c.Mode }
+func (c *CdLabel) MarshalJSON() ([]byte, error) {
+	type alias CdLabel
+	return withType("cdlabel", (*alias)(c))
+}
+
+// CdLabelParent wraps a CD object with its label.
+type CdLabelParent struct {
+	Mode     Mode `json:"mode"`
+	Fragment Node `json:"fragment"`
+	Loc      Loc  `json:"loc,omitempty"`
+}
+
+func (c *CdLabelParent) NodeType() string { return "cdlabelparent" }
+func (c *CdLabelParent) NodeMode() Mode   { return c.Mode }
+func (c *CdLabelParent) MarshalJSON() ([]byte, error) {
+	type alias CdLabelParent
+	return withType("cdlabelparent", (*alias)(c))
+}
+
 // Pmb is `\pmb{...}` (poor man's bold).
 type Pmb struct {
 	Mode   Mode   `json:"mode"`

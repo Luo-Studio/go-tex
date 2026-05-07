@@ -77,6 +77,8 @@ func envHandler(p *Parser, name string) (Node, error) {
 		return handleAlignedEnv(p, name)
 	case "subarray":
 		return handleSubarrayEnv(p, name)
+	case "CD":
+		return handleCDEnv(p)
 	}
 	return nil, errAt(fmt.Sprintf("No such environment: %s", name), p.cur)
 }
