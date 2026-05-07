@@ -10,6 +10,9 @@ func layoutArray(a *parser.Array, opts Options) *Box {
 	if len(a.Body) == 0 {
 		return NewEmpty()
 	}
+	if a.IsCD != nil && *a.IsCD {
+		return layoutCD(a.Body, opts)
+	}
 	metrics := opts.Metrics()
 	pt := 1.0 / metrics.PtPerEm
 	baselineSkip := 12.0 * pt

@@ -766,6 +766,66 @@ func katexStretchyPath(label string, widthEm float64) ([]path.Command, float64, 
 	return nil, 0, false
 }
 
+// mapPathXYHorizontalToVerticalCD maps a horizontal stretchy path to
+// vertical CD arrow coords using fn(x, y) → (newX, newY).
+func mapPathXYHorizontalToVerticalCD(cmds []path.Command, mapXY func(x, y float64) (float64, float64)) []path.Command {
+	out := make([]path.Command, len(cmds))
+	for i, c := range cmds {
+		out[i] = c
+		switch c.Kind {
+		case path.KindMoveTo, path.KindLineTo:
+			nx, ny := mapXY(c.X, c.Y)
+			out[i].X = nx
+			out[i].Y = ny
+		case path.KindCubicTo:
+			n1x, n1y := mapXY(c.X1, c.Y1)
+			n2x, n2y := mapXY(c.X2, c.Y2)
+			nx, ny := mapXY(c.X, c.Y)
+			out[i].X1 = n1x
+			out[i].Y1 = n1y
+			out[i].X2 = n2x
+			out[i].Y2 = n2y
+			out[i].X = nx
+			out[i].Y = ny
+		case path.KindQuadTo:
+			n1x, n1y := mapXY(c.X1, c.Y1)
+			nx, ny := mapXY(c.X, c.Y)
+			out[i].X1 = n1x
+			out[i].Y1 = n1y
+			out[i].X = nx
+			out[i].Y = ny
+		}
+	}
+	return out
+}
+
+// katexCDVertArrowFromRightarrow reuses the horizontal cdrightarrow
+// stretchy path and rotates it into a vertical CD arrow column.
+// Returns (commands, lateralExtentEm, ok).
+func katexCDVertArrowFromRightarrow(down bool, totalHeightEm, axisHeightEm float64) ([]path.Command, float64, bool) {
+	rowDepth := totalHeightEm/2 - axisHeightEm
+	if rowDepth < 0 {
+		rowDepth = 0
+	}
+	rowHeight := totalHeightEm - rowDepth
+	cmdsH, lateralEm, ok := katexStretchyPath(`\cdrightarrow`, totalHeightEm)
+	if !ok {
+		return nil, 0, false
+	}
+	wLat := lateralEm
+	var cmds []path.Command
+	if down {
+		cmds = mapPathXYHorizontalToVerticalCD(cmdsH, func(x, y float64) (float64, float64) {
+			return wLat/2 + y, x - rowHeight
+		})
+	} else {
+		cmds = mapPathXYHorizontalToVerticalCD(cmdsH, func(x, y float64) (float64, float64) {
+			return wLat/2 + y, rowDepth - x
+		})
+	}
+	return cmds, lateralEm, true
+}
+
 // =============================================================================
 // Wide-accent paths (\widehat / \widetilde / \widecheck / \overgroup / \undergroup)
 // =============================================================================
