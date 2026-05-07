@@ -134,8 +134,33 @@ func layoutArray(a *parser.Array, opts Options) *Box {
 		}
 	}
 
+	// Equation tags (e.g. (1) on the right of \begin{equation}/\begin{align}).
+	rowTagBoxes := make([]*Box, numRows)
+	tagColWidth := 0.0
+	textOpts := opts.WithStyle(opts.Style.Text())
+	if len(a.Tags) == numRows {
+		for ri, t := range a.Tags {
+			if t.Explicit != nil && len(t.Explicit) > 0 {
+				tb := layoutExpression(t.Explicit, textOpts, true)
+				if tb.Width > tagColWidth {
+					tagColWidth = tb.Width
+				}
+				rowTagBoxes[ri] = tb
+			}
+		}
+	}
+	tagGapEm := 0.0
+	if tagColWidth > 0 {
+		tagGapEm = textOpts.Metrics().Quad
+	}
+	totalWidth := arrayInnerW + tagGapEm + tagColWidth
+	tagsLeft := false
+	if a.Leqno != nil {
+		tagsLeft = *a.Leqno
+	}
+
 	return &Box{
-		Width:  arrayInnerW,
+		Width:  totalWidth,
 		Height: offset,
 		Depth:  totalH - offset,
 		Color:  opts.Color,
@@ -150,6 +175,10 @@ func layoutArray(a *parser.Array, opts Options) *Box {
 			ContentXOffset:  contentXOffset,
 			HLinesBeforeRow: hlines,
 			ArrayInnerWidth: arrayInnerW,
+			TagGapEm:        tagGapEm,
+			TagColWidth:     tagColWidth,
+			RowTags:         rowTagBoxes,
+			TagsLeft:        tagsLeft,
 		},
 	}
 }

@@ -564,6 +564,15 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 				emit(cell, dl, cellX, cellTopY, scale)
 				cx += colW * scale
 			}
+			// Equation tag (right-aligned in tag column).
+			if c.TagColWidth > 0 && ri < len(c.RowTags) {
+				if tb := c.RowTags[ri]; tb != nil {
+					tagStartEm := c.ArrayInnerWidth - c.ContentXOffset + c.TagGapEm
+					tagX := x + tagStartEm*scale + (c.TagColWidth-tb.Width)*scale
+					tagTop := baselineY - tb.Height*scale
+					emit(tb, dl, tagX, tagTop, scale)
+				}
+			}
 			cy += (rowH + rowD) * scale
 		}
 	case Scaled:
