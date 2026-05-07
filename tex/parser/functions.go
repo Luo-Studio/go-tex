@@ -68,6 +68,12 @@ func functionDispatch(p *Parser, callerName, breakOnText string) (Node, error) {
 	if cmd == `\textcolor` || cmd == `\color` {
 		return parseColor(p)
 	}
+	if isDelimSizing(cmd) {
+		return parseDelimSizing(p)
+	}
+	if isInfixCmd(cmd) {
+		return parseInfix(p)
+	}
 	if cmd == `\overbrace` || cmd == `\underbrace` {
 		return parseHorizBrace(p)
 	}
@@ -138,10 +144,18 @@ func parseHorizBrace(p *Parser) (Node, error) {
 	}, nil
 }
 
-// parseFunctionArg consumes one mandatory argument: either `{...}` or a
-// single token group. Skips leading whitespace.
+// parseFunctionArg consumes one mandatory argument: either `{...}` (which
+// becomes an OrdGroup spanning the braces) or a single symbol token, in
+// which case the symbol is wrapped in an OrdGroup whose loc matches the
+// token. This mirrors upstream's parse_argument_group, where every function
+// arg ends up as an OrdGroup so downstream consumers don't have to special-
+// case "single symbol" vs "braced group".
+//
+// Some callers (e.g. accents, sqrt index) prefer the unwrapped form; they
+// can call NormalizeArgument on the returned node.
 func parseFunctionArg(p *Parser, name string) (Node, error) {
 	p.consumeSpaces()
+	startTok := p.cur
 	g, err := p.parseGroup(name, "")
 	if err != nil {
 		return nil, err
@@ -149,7 +163,12 @@ func parseFunctionArg(p *Parser, name string) (Node, error) {
 	if g == nil {
 		return nil, errAt(fmt.Sprintf("Expected group after %s", name), p.cur)
 	}
-	return g, nil
+	if _, isGroup := g.(*OrdGroup); isGroup {
+		return g, nil
+	}
+	// Wrap a bare argument in an OrdGroup so the AST matches upstream.
+	loc := startTok.Loc
+	return &OrdGroup{Mode: p.mode, Body: []Node{g}, Loc: &loc}, nil
 }
 
 // =============================================================================

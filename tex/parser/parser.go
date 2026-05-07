@@ -119,9 +119,13 @@ func (p *Parser) parseExpression(breakOnInfix bool, breakOnText string) ([]Node,
 			continue
 		}
 		body = append(body, atom)
-		_ = breakOnInfix // reserved for \over/\atop infix handling
+		if breakOnInfix {
+			if _, isInfix := atom.(*Infix); isInfix {
+				break
+			}
+		}
 	}
-	return body, nil
+	return handleInfixNodes(body, p.mode)
 }
 
 // parseAtom parses one atom, possibly followed by ^/_ for super/subscripts
