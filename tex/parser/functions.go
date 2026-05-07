@@ -1,22 +1,63 @@
 package parser
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
-// functionDispatch handles a small registry of LaTeX commands. Returns
-// (node, nil) on a successful function call, (nil, nil) when the current
-// token is not a recognised function (so parseGroup can fall back to
-// parseSymbol), or (nil, err) on a parse error.
-//
-// This is the starting point for porting the upstream functions/ subdirectory.
-// Add commands here one at a time, incrementally growing parser coverage.
+// functionDispatch handles the registry of LaTeX commands the parser knows.
+// Returns (node, nil) on a successful function call, (nil, nil) when the
+// current token is not a recognised function (so parseGroup can fall back
+// to parseSymbol), or (nil, err) on a parse error.
 func functionDispatch(p *Parser, callerName, breakOnText string) (Node, error) {
-	switch p.cur.Text {
+	cmd := p.cur.Text
+	switch cmd {
 	case `\frac`, `\dfrac`, `\tfrac`, `\cfrac`:
 		return parseFrac(p)
 	case `\binom`, `\dbinom`, `\tbinom`:
 		return parseBinom(p)
 	case `\sqrt`:
 		return parseSqrt(p)
+	case `\displaystyle`, `\textstyle`, `\scriptstyle`, `\scriptscriptstyle`:
+		return parseStyling(p, breakOnText)
+	case `\text`, `\textrm`, `\textsf`, `\texttt`, `\textnormal`,
+		`\textbf`, `\textit`, `\textmd`, `\textup`, `\textsl`, `\textsc`:
+		return parseText(p)
+	case `\mathrm`, `\mathit`, `\mathbf`, `\mathnormal`, `\mathsf`,
+		`\mathtt`, `\mathfrak`, `\mathcal`, `\mathbb`, `\mathscr`,
+		`\Bbb`, `\frak`:
+		return parseMathFont(p)
+	case `\left`:
+		return parseLeft(p)
+	case `\right`:
+		return parseRight(p)
+	case `\middle`:
+		return parseMiddle(p)
+	case `\operatorname@`, `\operatornamewithlimits`:
+		return parseOperatorName(p)
+	case `\overline`:
+		return parseSimpleWrap(p, func(body Node) Node { return &Overline{Mode: p.mode, Body: body} })
+	case `\underline`:
+		return parseSimpleWrap(p, func(body Node) Node { return &Underline{Mode: p.mode, Body: body} })
+	case `\phantom`:
+		return parsePhantomLike(p, func(body []Node) Node { return &Phantom{Mode: p.mode, Body: body} })
+	case `\hphantom`:
+		return parsePhantomLike(p, func(body []Node) Node {
+			return &Phantom{Mode: p.mode, Body: body}
+		})
+	case `\vphantom`:
+		return parseSimpleWrap(p, func(body Node) Node { return &VPhantom{Mode: p.mode, Body: body} })
+	case `\colon`:
+		// `\colon` is a math-punct atom, not a symbol.
+		// (Upstream defines it via macro to a complex expansion, but for the
+		// common case the parser shape is just a punct atom.)
+		return nil, nil
+	}
+	if isMathAccent(cmd) {
+		return parseMathAccent(p)
+	}
+	if isAccentUnder(cmd) {
+		return parseAccentUnder(p)
 	}
 	return nil, nil
 }
@@ -35,7 +76,10 @@ func parseFunctionArg(p *Parser, name string) (Node, error) {
 	return g, nil
 }
 
-// parseFrac handles \frac{a}{b}, \dfrac, \tfrac, \cfrac.
+// =============================================================================
+// Fractions and roots
+// =============================================================================
+
 func parseFrac(p *Parser) (Node, error) {
 	cmd := p.cur.Text
 	p.advance()
@@ -53,13 +97,9 @@ func parseFrac(p *Parser) (Node, error) {
 		Numer:      numer,
 		Denom:      denom,
 		HasBarLine: true,
-		LeftDelim:  nil,
-		RightDelim: nil,
-		BarSize:    nil,
 	}, nil
 }
 
-// parseBinom handles \binom{n}{k} (and \dbinom/\tbinom).
 func parseBinom(p *Parser) (Node, error) {
 	cmd := p.cur.Text
 	p.advance()
@@ -75,19 +115,16 @@ func parseBinom(p *Parser) (Node, error) {
 	right := ")"
 	return &GenFrac{
 		Mode:       p.mode,
-		Continued:  false,
 		Numer:      numer,
 		Denom:      denom,
 		HasBarLine: false,
 		LeftDelim:  &left,
 		RightDelim: &right,
-		BarSize:    nil,
 	}, nil
 }
 
-// parseSqrt handles \sqrt[index]{body}.
 func parseSqrt(p *Parser) (Node, error) {
-	p.advance() // consume \sqrt
+	p.advance()
 	p.consumeSpaces()
 	var index Node
 	if p.cur.Text == "[" {
@@ -106,4 +143,253 @@ func parseSqrt(p *Parser) (Node, error) {
 		return nil, err
 	}
 	return &Sqrt{Mode: p.mode, Body: body, Index: index}, nil
+}
+
+// =============================================================================
+// Styling (\displaystyle, \textstyle, \scriptstyle, \scriptscriptstyle)
+// =============================================================================
+
+func parseStyling(p *Parser, breakOnText string) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	body, err := p.parseExpression(true, breakOnText)
+	if err != nil {
+		return nil, err
+	}
+	var style StyleStr
+	switch cmd {
+	case `\displaystyle`:
+		style = StyleDisplay
+	case `\textstyle`:
+		style = StyleText
+	case `\scriptstyle`:
+		style = StyleScript
+	case `\scriptscriptstyle`:
+		style = StyleScriptScript
+	default:
+		style = StyleText
+	}
+	return &Styling{Mode: p.mode, Style: style, Body: body}, nil
+}
+
+// =============================================================================
+// Text (\text, \textrm, etc.)
+// =============================================================================
+
+func parseText(p *Parser) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	// Switch to text mode for the body, then restore.
+	prev := p.mode
+	p.mode = ModeText
+	arg, err := parseFunctionArg(p, cmd)
+	p.mode = prev
+	if err != nil {
+		return nil, err
+	}
+	body := OrdArgument(arg)
+	font := cmd
+	return &Text{Mode: p.mode, Body: body, Font: &font}, nil
+}
+
+// parseMathFont handles \mathrm, \mathbf, etc. — produces a Font node.
+func parseMathFont(p *Parser) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	body, err := parseFunctionArg(p, cmd)
+	if err != nil {
+		return nil, err
+	}
+	font := mathFontKaTeXName(cmd)
+	return &Font{Mode: p.mode, Font: font, Body: body}, nil
+}
+
+// mathFontKaTeXName converts \mathXX -> the upstream "fontXX" string.
+//
+//	\mathrm  -> mathrm
+//	\Bbb     -> mathbb
+//	\frak    -> mathfrak
+//	\mathbf  -> mathbf, etc.
+func mathFontKaTeXName(cmd string) string {
+	if cmd == `\Bbb` {
+		return "mathbb"
+	}
+	if cmd == `\frak` {
+		return "mathfrak"
+	}
+	return strings.TrimPrefix(cmd, `\`)
+}
+
+// =============================================================================
+// Accents
+// =============================================================================
+
+var (
+	mathAccents = map[string]struct{}{
+		`\acute`: {}, `\grave`: {}, `\ddot`: {}, `\tilde`: {}, `\bar`: {},
+		`\breve`: {}, `\check`: {}, `\hat`: {}, `\vec`: {}, `\dot`: {},
+		`\mathring`: {}, `\widecheck`: {}, `\widehat`: {}, `\widetilde`: {},
+		`\overrightarrow`: {}, `\overleftarrow`: {}, `\Overrightarrow`: {},
+		`\overleftrightarrow`: {}, `\overgroup`: {}, `\overlinesegment`: {},
+		`\overleftharpoon`: {}, `\overrightharpoon`: {},
+	}
+	nonStretchyAccents = map[string]struct{}{
+		`\acute`: {}, `\grave`: {}, `\ddot`: {}, `\tilde`: {}, `\bar`: {},
+		`\breve`: {}, `\check`: {}, `\hat`: {}, `\vec`: {}, `\dot`: {},
+		`\mathring`: {},
+	}
+	accentUnders = map[string]struct{}{
+		`\underleftarrow`: {}, `\underrightarrow`: {}, `\underleftrightarrow`: {},
+		`\undergroup`: {}, `\underlinesegment`: {}, `\utilde`: {},
+	}
+)
+
+func isMathAccent(cmd string) bool { _, ok := mathAccents[cmd]; return ok }
+func isAccentUnder(cmd string) bool { _, ok := accentUnders[cmd]; return ok }
+
+func parseMathAccent(p *Parser) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	arg, err := parseFunctionArg(p, cmd)
+	if err != nil {
+		return nil, err
+	}
+	base := NormalizeArgument(arg)
+	_, nonStretchy := nonStretchyAccents[cmd]
+	isStretchy := !nonStretchy
+	isShifty := !isStretchy || cmd == `\widehat` || cmd == `\widetilde` || cmd == `\widecheck`
+	return &Accent{
+		Mode:       p.mode,
+		Label:      cmd,
+		IsStretchy: &isStretchy,
+		IsShifty:   &isShifty,
+		Base:       base,
+	}, nil
+}
+
+func parseAccentUnder(p *Parser) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	arg, err := parseFunctionArg(p, cmd)
+	if err != nil {
+		return nil, err
+	}
+	stretchy := true
+	shifty := false
+	return &AccentUnder{
+		Mode:       p.mode,
+		Label:      cmd,
+		IsStretchy: &stretchy,
+		IsShifty:   &shifty,
+		Base:       arg,
+	}, nil
+}
+
+// =============================================================================
+// Left/Right
+// =============================================================================
+
+func parseLeft(p *Parser) (Node, error) {
+	p.advance()
+	p.consumeSpaces()
+	delimTok := p.cur
+	delim, err := readDelim(p)
+	if err != nil {
+		return nil, err
+	}
+	body, err := p.parseExpression(false, "")
+	if err != nil {
+		return nil, err
+	}
+	if p.cur.Text != `\right` {
+		return nil, errAt(`\left missing matching \right`, delimTok)
+	}
+	right, err := parseRight(p)
+	if err != nil {
+		return nil, err
+	}
+	rr, _ := right.(*LeftRightRight)
+	if rr == nil {
+		return nil, errAt(`Expected \right after \left`, delimTok)
+	}
+	return &LeftRight{
+		Mode:       p.mode,
+		Body:       body,
+		Left:       delim,
+		Right:      rr.Delim,
+		RightColor: rr.Color,
+	}, nil
+}
+
+func parseRight(p *Parser) (Node, error) {
+	p.advance()
+	p.consumeSpaces()
+	delim, err := readDelim(p)
+	if err != nil {
+		return nil, err
+	}
+	return &LeftRightRight{Mode: p.mode, Delim: delim}, nil
+}
+
+func parseMiddle(p *Parser) (Node, error) {
+	p.advance()
+	p.consumeSpaces()
+	delim, err := readDelim(p)
+	if err != nil {
+		return nil, err
+	}
+	return &Middle{Mode: p.mode, Delim: delim}, nil
+}
+
+// readDelim reads a single delimiter token: either a literal delim (like
+// "(", ")", "|", ".") or a control sequence (\lbrace, \uparrow, …).
+func readDelim(p *Parser) (string, error) {
+	t := p.cur
+	if t.IsEOF() {
+		return "", errAt("Expected delimiter, got EOF", t)
+	}
+	p.advance()
+	return t.Text, nil
+}
+
+// =============================================================================
+// Operator-name and simple wrappers
+// =============================================================================
+
+func parseOperatorName(p *Parser) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	arg, err := parseFunctionArg(p, cmd)
+	if err != nil {
+		return nil, err
+	}
+	body := OrdArgument(arg)
+	always := cmd == `\operatornamewithlimits`
+	return &OperatorName{
+		Mode:               p.mode,
+		Body:               body,
+		AlwaysHandleSupSub: always,
+		Limits:             false,
+		ParentIsSupSub:     false,
+	}, nil
+}
+
+func parseSimpleWrap(p *Parser, build func(Node) Node) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	arg, err := parseFunctionArg(p, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return build(arg), nil
+}
+
+func parsePhantomLike(p *Parser, build func([]Node) Node) (Node, error) {
+	cmd := p.cur.Text
+	p.advance()
+	arg, err := parseFunctionArg(p, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return build(OrdArgument(arg)), nil
 }
