@@ -113,7 +113,19 @@ func layoutNode(n parser.Node, opts Options) *Box {
 		case parser.StyleScriptScript:
 			style = 6 // mathstyle.ScriptScript
 		}
-		return layoutExpression(v.Body, opts.WithStyle(style), true)
+		newOpts := opts.WithStyle(style)
+		body := layoutExpression(v.Body, newOpts, true)
+		// If the style change implies a scale change relative to the
+		// parent style, wrap in a Scaled box so display-list emit
+		// multiplies child scale.
+		ratio := style.SizeMultiplier() / opts.Style.SizeMultiplier()
+		if ratio != 1.0 {
+			return &Box{
+				Width: body.Width * ratio, Height: body.Height * ratio, Depth: body.Depth * ratio,
+				Color: opts.Color, Content: Scaled{Body: body, ChildScale: ratio},
+			}
+		}
+		return body
 	case *parser.Phantom:
 		// Phantom: lay out body but the box still has full dimensions.
 		// We simply lay out the body as normal for the dim parity.

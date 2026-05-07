@@ -240,6 +240,10 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 			}
 			cy += (rowH + rowD) * scale
 		}
+	case Scaled:
+		// Multiply current scale by child scale; child dims are in
+		// child em.
+		emit(c.Body, dl, x, y, scale*c.ChildScale)
 	case Empty, Kern:
 		// no items
 	}
