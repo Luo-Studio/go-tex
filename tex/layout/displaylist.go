@@ -169,13 +169,16 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 		cx += c.Inner.Width * scale
 		emit(c.Right, dl, cx, y+(b.Height-c.Right.Height)*scale, scale)
 	case Accent:
+		// Box width may be larger than base.Width (min 0.5em). Centre
+		// base within the box, then place accent in the box's frame.
+		baseX := x + (b.Width-c.Base.Width)*scale/2
 		baseTop := y + (b.Height-c.Base.Height)*scale
-		emit(c.Base, dl, x, baseTop, scale)
+		emit(c.Base, dl, baseX, baseTop, scale)
 		baseBaselineY := baseTop + c.Base.Height*scale
 		// Upstream to_display.rs:
 		//   accent_y = base_baseline - clearance + (accent.h - min(0.35, accent.h))
 		accentY := baseBaselineY + (-c.Clearance+c.Correction)*scale
-		accentX := x + (c.Base.Width-c.AccentBox.Width)*scale/2 + c.Skew*scale
+		accentX := x + (b.Width-c.AccentBox.Width)*scale/2 + c.Skew*scale
 		dl.Items = append(dl.Items, GlyphPath{
 			X:        accentX,
 			Y:        accentY,

@@ -209,6 +209,12 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 	if !ok {
 		return base
 	}
+	// Box width is at least 0.5em (matches upstream layout_accent's
+	// `base_w = body_box.width.max(0.5)`).
+	width := base.Width
+	if width < 0.5 {
+		width = 0.5
+	}
 	// Skew of the base character — used to shift the accent centre by
 	// upstream's accent layout (handle_accent in engine.rs).
 	skew := baseSkew(a.Base, opts)
@@ -262,7 +268,7 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 		}
 	}
 	return &Box{
-		Width:  base.Width,
+		Width:  width,
 		Height: height,
 		Depth:  base.Depth,
 		Color:  opts.Color,
