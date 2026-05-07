@@ -193,6 +193,14 @@ func layoutOpSymbol(name string, opts Options) *Box {
 	if ok {
 		cp = info.Codepoint
 	}
+	// \oiint / \oiiint use ∬/∭ as base + an ellipse overlay since the
+	// dedicated codepoints (U+222F/U+2230) often lack font metrics.
+	switch name {
+	case `\oiint`:
+		cp = 0x222C
+	case `\oiiint`:
+		cp = 0x222D
+	}
 	if cp == 0 {
 		return layoutSymbol(name, parser.ModeMath, opts)
 	}
@@ -220,9 +228,38 @@ func layoutOpSymbol(name string, opts Options) *Box {
 		h -= shift
 		d += shift
 	}
-	return &Box{
+	base := &Box{
 		Width: cm.Width + cm.Italic, Height: h, Depth: d, Color: opts.Color,
 		Content: Glyph{FontID: font, CharCode: cp},
+	}
+	// \oiint / \oiiint: overlay an ellipse on the integrals.
+	if name == `\oiint` || name == `\oiiint` {
+		w := base.Width
+		ellipseCmds := ellipseOverlayPath(w, base.Height, base.Depth)
+		overlay := &Box{
+			Width: w, Height: base.Height, Depth: base.Depth, Color: opts.Color,
+			Content: SvgPath{Commands: ellipseCmds, Fill: false},
+		}
+		return makeHBox([]*Box{base, NewKern(-w), overlay}, opts.Color)
+	}
+	return base
+}
+
+// ellipseOverlayPath builds the ellipse overlay used by \oiint/\oiiint.
+// Coordinates are box-local with origin at baseline-left, y down.
+func ellipseOverlayPath(w, h, d float64) []path.Command {
+	cx := w / 2
+	cy := (d - h) / 2
+	a := w * 0.402
+	const b = 0.3
+	const k = 0.62
+	return []path.Command{
+		path.MoveTo(cx+a, cy),
+		path.CubicTo(cx+a, cy-k*b, cx+k*a, cy-b, cx, cy-b),
+		path.CubicTo(cx-k*a, cy-b, cx-a, cy-k*b, cx-a, cy),
+		path.CubicTo(cx-a, cy+k*b, cx-k*a, cy+b, cx, cy+b),
+		path.CubicTo(cx+k*a, cy+b, cx+a, cy+k*b, cx+a, cy),
+		{Kind: path.KindClose},
 	}
 }
 
