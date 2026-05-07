@@ -450,10 +450,86 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 			Color:     b.Color,
 		})
 	case Array:
-		// Top of array content (y) corresponds to box top (y + 0).
-		// Each row r has baseline at sum_{i<r}(row_h[i]+row_d[i]) + row_h[r]
-		// from the box top.
-		cy := y
+		// Top of array content (y) corresponds to box top.
+		yTop := y
+		arrayTotalHeight := (b.Height + b.Depth) * scale
+		lineThickness := c.RuleThickness * scale
+		if c.RuleThickness == 0 {
+			// Default thickness from KaTeX: 0.04em.
+			lineThickness = 0.04 * scale
+		}
+		// Boundary y positions (top of array, then after each row).
+		boundaryYs := make([]float64, 0, len(c.Cells)+1)
+		curB := yTop
+		boundaryYs = append(boundaryYs, curB)
+		for ri := range c.Cells {
+			curB += (c.RowHeights[ri] + c.RowDepths[ri]) * scale
+			boundaryYs = append(boundaryYs, curB)
+		}
+		ruleStep := lineThickness + c.DoubleRuleSep*scale
+		// Horizontal rules.
+		for r, hlines := range c.HLinesBeforeRow {
+			if r >= len(boundaryYs) {
+				break
+			}
+			n := len(hlines)
+			var startY float64
+			if r == 0 {
+				startY = boundaryYs[0]
+			} else {
+				startY = boundaryYs[r] - float64(n-1)*ruleStep
+			}
+			width := c.ArrayInnerWidth * scale
+			if width == 0 {
+				width = b.Width * scale
+			}
+			for i, dashed := range hlines {
+				dl.Items = append(dl.Items, Line{
+					X:         x,
+					Y:         startY + float64(i)*ruleStep,
+					Width:     width,
+					Thickness: lineThickness,
+					Color:     b.Color,
+					Dashed:    dashed,
+				})
+			}
+		}
+		// Vertical column separators.
+		colGapHalf := c.ColGap / 2
+		for i, sep := range c.ColSeparators {
+			if sep == nil {
+				continue
+			}
+			isDashed := *sep
+			prefixW := 0.0
+			for j := 0; j < i && j < len(c.ColWidths); j++ {
+				prefixW += c.ColWidths[j]
+			}
+			localX := c.ContentXOffset - colGapHalf + prefixW + c.ColGap*float64(i)
+			absX := x + localX*scale - lineThickness/2
+			if isDashed {
+				// Dashed: draw segments.
+				dash := 4 * lineThickness
+				period := 2 * dash
+				curY := yTop
+				for curY < yTop+arrayTotalHeight {
+					segH := dash
+					if curY+segH > yTop+arrayTotalHeight {
+						segH = yTop + arrayTotalHeight - curY
+					}
+					dl.Items = append(dl.Items, Rect{
+						X: absX, Y: curY, Width: lineThickness, Height: segH, Color: b.Color,
+					})
+					curY += period
+				}
+			} else {
+				dl.Items = append(dl.Items, Rect{
+					X: absX, Y: yTop, Width: lineThickness, Height: arrayTotalHeight, Color: b.Color,
+				})
+			}
+		}
+		// Cells.
+		cy := yTop
 		for ri, row := range c.Cells {
 			rowH := c.RowHeights[ri]
 			rowD := c.RowDepths[ri]
