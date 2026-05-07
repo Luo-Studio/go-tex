@@ -3,6 +3,7 @@ package layout
 import (
 	"github.com/luo-studio/go-tex/tex/fontmetrics"
 	"github.com/luo-studio/go-tex/tex/parser"
+	"github.com/luo-studio/go-tex/tex/path"
 	"github.com/luo-studio/go-tex/tex/symbols"
 )
 
@@ -508,4 +509,35 @@ func layoutUnderline(o *parser.Underline, opts Options) *Box {
 	rt := opts.Metrics().DefaultRuleThickness
 	return &Box{Width: body.Width, Height: body.Height, Depth: body.Depth + 3*rt, Color: opts.Color,
 		Content: Underline{Body: body, RuleThickness: rt}}
+}
+
+// layoutAngl is `\angl{body}` — actuarial angle: a horizontal roof
+// above the body and a vertical bar on the right (KaTeX style).
+//
+// Mirrors upstream layout_angl: roof at body.height + 0.1 above
+// baseline, right bar runs from roof down to body.depth + 0.3 below
+// baseline.
+func layoutAngl(node parser.Node, opts Options) *Box {
+	inner := layoutNode(node, opts)
+	w := inner.Width
+	if w < 0.3 {
+		w = 0.3
+	}
+	clearance := 0.1
+	arcH := inner.Height + clearance
+	cmds := []path.Command{
+		path.MoveTo(0, -arcH),
+		path.LineTo(w, -arcH),
+		path.LineTo(w, inner.Depth+0.3),
+	}
+	return &Box{
+		Width:  w,
+		Height: arcH,
+		Depth:  inner.Depth,
+		Color:  opts.Color,
+		Content: Angl{
+			PathCommands: cmds,
+			Body:         inner,
+		},
+	}
 }

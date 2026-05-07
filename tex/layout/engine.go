@@ -166,15 +166,13 @@ func layoutNode(n parser.Node, opts Options) *Box {
 	case *parser.Array:
 		return layoutArray(v, opts)
 	case *parser.Enclose:
-		// Minimal Enclose: lay out body. Background/border drawing not
-		// yet emitted. \\angl draws an actuarial angle path on top
-		// (added in displaylist emit).
-		body, isBody := v.Body, true
-		if !isBody {
-			body = nil
+		// Minimal Enclose: most labels just emit the body. \angl draws
+		// an actuarial-angle path (roof + right bar). Background/border
+		// drawing for \fbox/\cancel/etc. is not yet emitted.
+		if v.Label == `\angl` {
+			return layoutAngl(v.Body, opts)
 		}
-		bb := layoutNode(body, opts)
-		return bb
+		return layoutNode(v.Body, opts)
 	case *parser.HorizBrace:
 		// Stub: just lay out base.
 		return layoutNode(v.Base, opts)

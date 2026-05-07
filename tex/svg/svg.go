@@ -117,14 +117,37 @@ func emitPath(out *strings.Builder, p layout.PathItem, opts Options) {
 	em := opts.FontSize
 	x0 := tx(p.X, opts)
 	y0 := ty(p.Y, opts)
-	d := pathToD(x0, y0, em, p.Commands)
 	if p.Fill {
-		fmt.Fprintf(out, `<path d="%s" fill="%s" fill-rule="nonzero" stroke="none"/>`,
-			d, colorRGBA(p.Color))
-	} else {
-		fmt.Fprintf(out, `<path d="%s" stroke="%s" stroke-width="%s" fill="none"/>`,
-			d, colorRGBA(p.Color), fmtNum(opts.StrokeWidth))
+		// Upstream emits one <path> per MoveTo-delimited segment.
+		start := 0
+		for i := 1; i < len(p.Commands); i++ {
+			if p.Commands[i].Kind == path.KindMoveTo {
+				if i > start {
+					d := pathToD(x0, y0, em, p.Commands[start:i])
+					if d != "" {
+						fmt.Fprintf(out, `<path d="%s" fill="%s" fill-rule="nonzero" stroke="none"/>`,
+							d, colorRGBA(p.Color))
+					}
+				}
+				start = i
+			}
+		}
+		if start < len(p.Commands) {
+			d := pathToD(x0, y0, em, p.Commands[start:])
+			if d != "" {
+				fmt.Fprintf(out, `<path d="%s" fill="%s" fill-rule="nonzero" stroke="none"/>`,
+					d, colorRGBA(p.Color))
+			}
+		}
+		return
 	}
+	d := pathToD(x0, y0, em, p.Commands)
+	if d == "" {
+		return
+	}
+	fmt.Fprintf(out,
+		`<path d="%s" fill="none" stroke="%s" stroke-width="%s" stroke-linecap="round" stroke-linejoin="round"/>`,
+		d, colorRGBA(p.Color), fmtNum(opts.StrokeWidth))
 }
 
 func pathToD(originX, originY, em float64, cmds []path.Command) string {
@@ -147,8 +170,9 @@ func pathToD(originX, originY, em float64, cmds []path.Command) string {
 		case path.KindClose:
 			s.WriteByte('Z')
 		}
+		s.WriteByte(' ')
 	}
-	return s.String()
+	return strings.TrimRight(s.String(), " ")
 }
 
 // katexFace maps an internal font id to (family, weight, style) for

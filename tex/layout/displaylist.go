@@ -463,9 +463,45 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 		// Multiply current scale by child scale; child dims are in
 		// child em.
 		emit(c.Body, dl, x, y, scale*c.ChildScale)
+	case Angl:
+		// Body shares baseline at y + b.Height*scale. Path commands are
+		// in body-relative em with y measured from baseline (negative =
+		// up). Path is emitted FIRST to match upstream item ordering.
+		baselineY := y + b.Height*scale
+		scaled := make([]path.Command, len(c.PathCommands))
+		for i, cmd := range c.PathCommands {
+			scaled[i] = scalePathCommand(cmd, scale)
+		}
+		dl.Items = append(dl.Items, PathItem{
+			X: x, Y: baselineY,
+			Commands: scaled, Fill: false, Color: b.Color,
+		})
+		emit(c.Body, dl, x, y+(b.Height-c.Body.Height)*scale, scale)
 	case Empty, Kern:
 		// no items
 	}
+}
+
+func scalePathCommand(cmd path.Command, scale float64) path.Command {
+	out := cmd
+	switch cmd.Kind {
+	case path.KindMoveTo, path.KindLineTo:
+		out.X = cmd.X * scale
+		out.Y = cmd.Y * scale
+	case path.KindCubicTo:
+		out.X1 = cmd.X1 * scale
+		out.Y1 = cmd.Y1 * scale
+		out.X2 = cmd.X2 * scale
+		out.Y2 = cmd.Y2 * scale
+		out.X = cmd.X * scale
+		out.Y = cmd.Y * scale
+	case path.KindQuadTo:
+		out.X1 = cmd.X1 * scale
+		out.Y1 = cmd.Y1 * scale
+		out.X = cmd.X * scale
+		out.Y = cmd.Y * scale
+	}
+	return out
 }
 
 func fontIDOfGlyph(b *Box) string {
