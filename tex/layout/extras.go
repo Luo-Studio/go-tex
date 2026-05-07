@@ -236,7 +236,7 @@ var accentChar = map[string]rune{
 	`\tilde`:     '~',
 	`\widetilde`: '~',
 	`\acute`:     0x02CA, // ˊ
-	`\grave`:     '`',
+	`\grave`:     0x02CB, // ˋ
 	`\dot`:       0x02D9,
 	`\ddot`:      0x00A8,
 	`\bar`:       0x02C9, // ˉ
