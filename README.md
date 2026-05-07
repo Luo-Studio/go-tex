@@ -11,7 +11,7 @@ upstream Rust implementation while following idiomatic Go library practices.
 | Lex | **100%** (1099/1099) | byte-identical to upstream `lex` CLI |
 | Parse, non-mhchem | **97.89%** (975/996) | canonical match against upstream `parse` JSON AST |
 | Parse, all incl. mhchem | **88.72%** (975/1099) | mhchem `\ce`/`\pu` deferred |
-| **SVG byte parity** | **89.86%** (895/996) non-mhchem | byte-identical to upstream render-svg text mode |
+| **SVG byte parity** | **90.56%** (902/996) non-mhchem | byte-identical to upstream render-svg text mode |
 | PNG render pipeline | working | oksvg+rasterx; AA differs from upstream's ab_glyph |
 | PNG byte parity | 0% | requires bit-exact rasteriser matching ab_glyph |
 
@@ -61,7 +61,7 @@ LayoutBox tree
      │  tex/layout/displaylist (recursive emit with absolute positions)
      ▼
 DisplayList
-     │  tex/svg (text-mode SVG, 89.86% byte parity)
+     │  tex/svg (text-mode SVG, 90.56% byte parity)
      ▼
 SVG XML
      │  tex/render via oksvg + rasterx
