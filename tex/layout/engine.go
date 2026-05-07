@@ -146,6 +146,8 @@ func layoutNode(n parser.Node, opts Options) *Box {
 		return layoutUnderline(v, opts)
 	case *parser.Internal, *parser.NoNumber:
 		return NewEmpty()
+	case *parser.Array:
+		return layoutArray(v, opts)
 	}
 	// Fallback for unhandled node types — emit an empty box rather than
 	// crashing so the test harness can still score the rest.

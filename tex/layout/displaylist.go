@@ -182,6 +182,37 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 			Thickness: c.RuleThickness * scale,
 			Color:     b.Color,
 		})
+	case Array:
+		// Walk cells in row-major order. Stack rows vertically with the
+		// computed row heights/depths; align each cell within its column
+		// per c.ColAligns.
+		cy := y
+		for ri, row := range c.Cells {
+			rowH := c.RowHeights[ri]
+			rowD := c.RowDepths[ri]
+			cellY := cy
+			cx := x + c.ContentXOffset*scale
+			for ci, cell := range row {
+				colW := c.ColWidths[ci]
+				if ci > 0 {
+					cx += 2 * c.ColGap * scale
+				}
+				var cellX float64
+				switch c.ColAligns[ci] {
+				case 'l':
+					cellX = cx
+				case 'r':
+					cellX = cx + (colW-cell.Width)*scale
+				default:
+					cellX = cx + (colW-cell.Width)*scale/2
+				}
+				baselineY := cellY + rowH*scale
+				cellTopY := baselineY - cell.Height*scale
+				emit(cell, dl, cellX, cellTopY, scale)
+				cx += colW * scale
+			}
+			cy += (rowH + rowD) * scale
+		}
 	case Empty, Kern:
 		// no items
 	}
