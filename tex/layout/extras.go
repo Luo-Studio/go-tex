@@ -149,18 +149,20 @@ var accentChar = map[string]rune{
 	`\breve`:     0x02D8,
 	`\vec`:       0x20D7,
 	`\mathring`:  0x02DA,
-	// Text-mode accents from upstream's accent-token table.
+	// Text-mode accents — codepoints from upstream's symbols table.
+	// These differ from the math-mode versions (e.g. \\^ -> U+02C6, while
+	// math \\hat -> ASCII ^).
 	`\'`:         0x02CA, // ˊ
-	"\\`":        '`',
-	`\^`:         '^',
-	`\~`:         '~',
-	`\=`:         0x02C9,
-	`\u`:         0x02D8,
-	`\.`:         0x02D9,
-	`\"`:         0x00A8,
-	`\r`:         0x02DA,
+	"\\`":        0x02CB, // ˋ
+	`\^`:         0x02C6, // ˆ
+	`\~`:         0x02DC, // ˜
+	`\=`:         0x02C9, // ˉ
+	`\u`:         0x02D8, // ˘
+	`\.`:         0x02D9, // ˙
+	`\"`:         0x00A8, // ¨
+	`\r`:         0x02DA, // ˚
 	`\H`:         0x02DD, // ˝
-	`\v`:         0x02C7,
+	`\v`:         0x02C7, // ˇ
 	`\c`:         0x00B8, // ¸
 }
 
