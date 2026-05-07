@@ -475,10 +475,14 @@ func parseBoldsymbol(p *Parser) (Node, error) {
 	}, nil
 }
 
-// parseEmph handles \emph{...} — emit Text node with font="\emph".
+// parseEmph handles \emph{...} — emit Text node with font="\emph",
+// switching to text mode for the body (mirrors upstream).
 func parseEmph(p *Parser) (Node, error) {
 	p.advance()
+	prev := p.mode
+	p.switchMode(ModeText)
 	body, err := parseFunctionArg(p, `\emph`)
+	p.switchMode(prev)
 	if err != nil {
 		return nil, err
 	}
