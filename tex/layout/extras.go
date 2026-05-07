@@ -287,15 +287,27 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 	if visCap > 0.35 {
 		visCap = 0.35
 	}
-	// Mirrors upstream handle_accent_clearance for non-stretchy, non-arrow,
-	// non-nested-Accent bodies.
+	// Mirrors upstream handle_accent_clearance. For nested above-accents
+	// use the inner accent's visual top instead of the strut-inflated
+	// body height to avoid double-counting (e.g. \hat{\hat{x}}).
+	hForKern := base.Height
+	if innerAcc, ok := base.Content.(Accent); ok && !innerAcc.IsBelow {
+		innerVisCap := innerAcc.AccentBox.Height
+		if innerVisCap > 0.35 {
+			innerVisCap = 0.35
+		}
+		innerVisualTop := innerAcc.Clearance + innerVisCap
+		if base.Height > innerVisualTop+0.002 {
+			hForKern = innerVisualTop
+		}
+	}
 	var clearance float64
 	if a.Label == `\bar` || a.Label == `\=` {
 		// Macron special case: clearance = body.height (less the
 		// 0.12em macron adjustment applied below).
 		clearance = base.Height
 	} else {
-		katexPos := base.Height - xHeight
+		katexPos := hForKern - xHeight
 		if katexPos < 0 {
 			katexPos = 0
 		}
