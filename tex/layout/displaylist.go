@@ -416,39 +416,50 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 			Color:    b.Color,
 		})
 	case Radical:
-		// Surd left edge: shift right by max(0, index.Width*indexScale - surdW + 0.3)
-		// when index is present.
-		surdX := x
-		bodyX := x + c.IndexOffset*scale
-		if c.Index != nil {
-			extra := c.Index.Width*c.IndexScale - c.IndexOffset + 0.3
-			if extra > 0 {
-				surdX += extra * scale
-				bodyX += extra * scale
-			}
-			// Index above-left of surd. Approximate position.
-			indexX := x + 0.3*scale
-			indexY := y + c.RuleThickness*scale + c.Index.Height*scale*c.IndexScale
-			emit(c.Index, dl, indexX, indexY-c.Index.Height*scale*c.IndexScale, scale*c.IndexScale)
-		}
+		// Mirror upstream: surd starts at x + index_offset, body
+		// follows at surd_x + radical_width (where radical_width =
+		// lbox.width - index_offset - body.width = surd glyph width).
 		baselineY := y + b.Height*scale
+		radicalWidth := (b.Width - c.IndexOffset - c.Body.Width) * scale
+		surdX := x + c.IndexOffset*scale
+		// Pick surd glyph from one of Main / Size1-4 by InnerHeight.
+		surdFont := surdFontForInnerHeight(c.InnerHeight)
+		gh := 0.0
+		if cm, ok := fontmetrics.Lookup(surdFont, 0x221A); ok {
+			gh = cm.Height
+		} else {
+			gh = b.Height - c.RuleThickness
+		}
+		surdShift := b.Height - c.RuleThickness - gh
+		surdY := baselineY - surdShift*scale
+		// Index: baseline at y - to_shift where to_shift = 0.6*(h-d).
+		if c.Index != nil {
+			toShift := 0.6 * (b.Height - b.Depth)
+			indexBaselineY := baselineY - toShift*scale
+			childScale := scale * c.IndexScale
+			indexX := surdX + (5.0/18.0)*scale
+			emit(c.Index, dl, indexX, indexBaselineY-c.Index.Height*childScale, childScale)
+		}
 		dl.Items = append(dl.Items, GlyphPath{
 			X:        surdX,
-			Y:        baselineY,
+			Y:        surdY,
 			Scale:    scale,
-			Font:     "Main-Regular",
+			Font:     surdFont,
 			CharCode: 0x221A,
 			Color:    b.Color,
 		})
-		bodyY := y + 4*c.RuleThickness*scale
-		emit(c.Body, dl, bodyX, bodyY, scale)
+		// Vinculum (rule) on top of body, level with surd's top bar.
+		lineCenterY := surdY - gh*scale + (c.RuleThickness*scale)/2
 		dl.Items = append(dl.Items, Line{
-			X:         bodyX,
-			Y:         y + 2*c.RuleThickness*scale,
+			X:         surdX + radicalWidth,
+			Y:         lineCenterY,
 			Width:     c.Body.Width * scale,
 			Thickness: c.RuleThickness * scale,
 			Color:     b.Color,
 		})
+		// Body emitted at surd_x + radical_width.
+		bodyTop := baselineY - c.Body.Height*scale
+		emit(c.Body, dl, surdX+radicalWidth, bodyTop, scale)
 	case Array:
 		// Top of array content (y) corresponds to box top.
 		yTop := y
@@ -628,6 +639,23 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 	case Empty, Kern:
 		// no items
 	}
+}
+
+// surdFontForInnerHeight picks the KaTeX font containing the √ glyph at a
+// suitable size for the given inner radical height. Mirrors upstream
+// surd_font_for_inner_height.
+func surdFontForInnerHeight(h float64) string {
+	switch {
+	case h <= 1.0:
+		return "Main-Regular"
+	case h <= 1.2:
+		return "Size1-Regular"
+	case h <= 1.8:
+		return "Size2-Regular"
+	case h <= 2.4:
+		return "Size3-Regular"
+	}
+	return "Size4-Regular"
 }
 
 func scalePathCommand(cmd path.Command, scale float64) path.Command {

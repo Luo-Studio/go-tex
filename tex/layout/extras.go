@@ -372,48 +372,76 @@ func layoutAccentUnder(a *parser.AccentUnder, opts Options) *Box {
 	return base
 }
 
-// layoutSqrt lays out `\sqrt[index]{body}`. Mirrors the simplified version
-// of upstream's layout_radical.
+// layoutSqrt lays out `\sqrt[index]{body}`. Mirrors upstream's
+// layout_radical.
 func layoutSqrt(s *parser.Sqrt, opts Options) *Box {
-	body := layoutNode(s.Body, opts.WithStyle(opts.Style.Cramped()))
-	rt := opts.Metrics().DefaultRuleThickness
-	innerH := body.Height
-	if innerH == 0 {
-		innerH = opts.Metrics().XHeight
+	cramped := opts.Style.Cramped()
+	body := layoutNode(s.Body, opts.WithStyle(cramped))
+	if body.Height == 0 {
+		body.Height = opts.Metrics().XHeight
 	}
+	m := opts.Metrics()
+	theta := m.DefaultRuleThickness
+	phi := theta
+	if opts.Style.IsDisplay() {
+		phi = m.XHeight
+	}
+	lineClearance := theta + phi/4
+	minDelimH := body.Height + body.Depth + lineClearance + theta
+	texH := selectSurdHeight(minDelimH)
+	ruleW := theta
 	surdM, ok := fontmetrics.Lookup(fontmetrics.FontMainRegular, 0x221A)
-	surdW := 0.83334
+	advW := 0.833
 	if ok {
-		surdW = surdM.Width
+		advW = surdM.Width
 	}
-	var index *Box
-	indexScale := 0.5 // scriptscript style
+
+	delimDepth := texH - ruleW
+	if delimDepth > body.Height+body.Depth+lineClearance {
+		lineClearance = (lineClearance + delimDepth - body.Height - body.Depth) / 2
+	}
+	imgShift := texH - body.Height - lineClearance - ruleW
+	height := texH + ruleW - imgShift
+	depth := body.Depth
+	if imgShift > body.Depth {
+		depth = imgShift
+	}
+
+	const indexKern = 0.05
+	var indexBox *Box
+	indexOffset := 0.0
+	indexScale := 1.0
 	if s.Index != nil {
-		idxOpts := opts.WithStyle(6) // ScriptScript
-		index = layoutNode(s.Index, idxOpts)
+		rootStyle := opts.Style.Superscript().Superscript()
+		indexBox = layoutNode(s.Index, opts.WithStyle(rootStyle))
+		indexScale = rootStyle.SizeMultiplier() / opts.Style.SizeMultiplier()
+		indexOffset = indexBox.Width*indexScale + indexKern
 	}
-	w := surdW + body.Width
-	if index != nil {
-		// Index sits above-left and may push out the surd start; for
-		// matching dim parity, reserve max(0, index.Width*scale - 0.5em).
-		offset := index.Width*indexScale - surdW + 0.3
-		if offset > 0 {
-			w += offset
-		}
-	}
-	h := innerH + 4*rt
-	d := body.Depth
+	w := indexOffset + advW + body.Width
 	return &Box{
-		Width: w, Height: h, Depth: d, Color: opts.Color,
+		Width: w, Height: height, Depth: depth, Color: opts.Color,
 		Content: Radical{
 			Body:          body,
-			Index:         index,
-			RuleThickness: rt,
-			InnerHeight:   innerH,
-			IndexOffset:   surdW,
+			Index:         indexBox,
+			IndexOffset:   indexOffset,
 			IndexScale:    indexScale,
+			RuleThickness: ruleW,
+			InnerHeight:   texH,
 		},
 	}
+}
+
+func selectSurdHeight(min float64) float64 {
+	heights := []float64{1.0, 1.2, 1.8, 2.4, 3.0}
+	for _, h := range heights {
+		if h >= min {
+			return h
+		}
+	}
+	if min > 3.0 {
+		return min
+	}
+	return 3.0
 }
 
 // layoutLeftRight: lay out the inner, then pick stretchy delimiters
