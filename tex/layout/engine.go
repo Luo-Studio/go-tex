@@ -488,8 +488,29 @@ func layoutSymbol(text string, mode parser.Mode, opts Options) *Box {
 		}
 	}
 	if !ok {
-		// No metrics — emit a zero-width placeholder box.
-		return &Box{Color: opts.Color, Content: Glyph{FontID: font, CharCode: ch}}
+		// Glyph missing from all bundled KaTeX fonts (e.g. CJK in
+		// \text, emoji, dingbats, ☺, etc.). Mirrors upstream
+		// missing_glyph_metrics_fallback + switch to CjkRegular for
+		// wide chars so the SVG renders with system sans-serif.
+		w := missingGlyphWidthEm(resolved)
+		m := opts.Metrics()
+		var h float64
+		if w >= 0.99 {
+			h = m.Quad * 0.92
+			if m.XHeight > h {
+				h = m.XHeight
+			}
+		} else {
+			h = m.XHeight
+		}
+		fid := font
+		if w >= 0.99 {
+			fid = "CJK-Regular"
+		}
+		return &Box{
+			Width: w, Height: h, Color: opts.Color,
+			Content: Glyph{FontID: fid, CharCode: resolved},
+		}
 	}
 	// KaTeX SymbolNode.toNode applies `margin-right: italic` for math
 	// glyphs, so the advance width = width + italic.
@@ -541,6 +562,32 @@ func selectFont(text string, resolved rune, mode parser.Mode) string {
 
 func isASCIILetter(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+// missingGlyphWidthEm mirrors upstream missing_glyph_width_em: pick the
+// advance for glyphs not in any bundled KaTeX font. CJK / emoji /
+// dingbats / misc symbols get 1em; everything else gets 0.5em.
+func missingGlyphWidthEm(r rune) float64 {
+	c := uint32(r)
+	switch {
+	case (c >= 0x3040 && c <= 0x30FF) || (c >= 0x31F0 && c <= 0x31FF):
+		return 1.0
+	case (c >= 0x3400 && c <= 0x4DBF) || (c >= 0x4E00 && c <= 0x9FFF) || (c >= 0xF900 && c <= 0xFAFF):
+		return 1.0
+	case c >= 0xAC00 && c <= 0xD7AF:
+		return 1.0
+	case (c >= 0xFF01 && c <= 0xFF60) || (c >= 0xFFE0 && c <= 0xFFEE):
+		return 1.0
+	case c >= 0x1F000 && c <= 0x1FAFF:
+		return 1.0
+	case c >= 0x2700 && c <= 0x27BF:
+		return 1.0
+	case c >= 0x2600 && c <= 0x26FF:
+		return 1.0
+	case c >= 0x2B00 && c <= 0x2BFF:
+		return 1.0
+	}
+	return 0.5
 }
 
 // mathFontToKaTeX maps the parser's font name (mathrm, mathbf, ...) to
