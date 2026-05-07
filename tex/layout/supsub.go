@@ -43,7 +43,11 @@ func layoutOpWithLimits(base parser.Node, sup, sub parser.Node, opts Options) *B
 			baseBox = layoutOp(v, opts)
 		}
 	case *parser.OperatorName:
-		baseBox = layoutOperatorName(v, opts)
+		// Mirror upstream build_op_base: when used as a base for limits,
+		// the OperatorName body lays out via the normal math-mode path
+		// (Math-Italic for Latin letters), not the upright text-mode
+		// rendering of layoutOperatorName.
+		baseBox = layoutExpression(v.Body, opts, true)
 	default:
 		// Fallback to regular SupSub layout.
 		return layoutSupSubNode(base, sup, sub, opts)
