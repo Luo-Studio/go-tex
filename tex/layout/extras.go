@@ -349,15 +349,20 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 	// Mirrors upstream handle_accent_clearance. For nested above-accents
 	// use the inner accent's visual top instead of the strut-inflated
 	// body height to avoid double-counting (e.g. \hat{\hat{x}}).
+	// Exception: for SVG inner accents (\vec — accentBox.height ≈ 0),
+	// upstream uses body.height directly because that's already KaTeX's
+	// clearance + h_em (no strut inflation).
 	hForKern := base.Height
 	if innerAcc, ok := base.Content.(Accent); ok && !innerAcc.IsBelow {
-		innerVisCap := innerAcc.AccentBox.Height
-		if innerVisCap > 0.35 {
-			innerVisCap = 0.35
-		}
-		innerVisualTop := innerAcc.Clearance + innerVisCap
-		if base.Height > innerVisualTop+0.002 {
-			hForKern = innerVisualTop
+		if innerAcc.AccentBox.Height > 0.001 {
+			innerVisCap := innerAcc.AccentBox.Height
+			if innerVisCap > 0.35 {
+				innerVisCap = 0.35
+			}
+			innerVisualTop := innerAcc.Clearance + innerVisCap
+			if base.Height > innerVisualTop+0.002 {
+				hForKern = innerVisualTop
+			}
 		}
 	}
 	var clearance float64

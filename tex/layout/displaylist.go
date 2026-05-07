@@ -642,12 +642,13 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 		bodyTopY := y + outerPad*scale
 		emit(c.Body, dl, x+bodyOffsetEm*scale, bodyTopY, scale)
 	case RaiseBox:
-		// Positive Shift moves the body up. The wrapping box has
-		// Height = body.Height + Shift; emitting the body with its top
-		// at y places its baseline at y + body.Height, which equals
-		// (y + Box.Height - Shift), i.e. raised by Shift relative to
-		// the box's baseline.
-		emit(c.Body, dl, x, y, scale)
+		// Positive Shift moves the body up. Place the body so its
+		// baseline lands at (box.baseline - Shift). Mirrors upstream
+		// emit_box's RaiseBox arm.
+		baselineY := y + b.Height*scale
+		bodyBaselineY := baselineY - c.Shift*scale
+		bodyTop := bodyBaselineY - c.Body.Height*scale
+		emit(c.Body, dl, x, bodyTop, scale)
 	case SvgPath:
 		// Path coords are in body-relative em with y measured from
 		// baseline (negative = up).
