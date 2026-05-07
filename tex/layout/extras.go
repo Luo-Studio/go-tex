@@ -532,6 +532,89 @@ func layoutUnderline(o *parser.Underline, opts Options) *Box {
 		Content: Underline{Body: body, RuleThickness: rt}}
 }
 
+// isSingleCharBody mirrors KaTeX isCharacterBox: single Atom/MathOrd/
+// TextOrd, possibly wrapped in a 1-element OrdGroup or Styling.
+func isSingleCharBody(n parser.Node) bool {
+	switch v := n.(type) {
+	case *parser.OrdGroup:
+		return len(v.Body) == 1 && isSingleCharBody(v.Body[0])
+	case *parser.Styling:
+		return len(v.Body) == 1 && isSingleCharBody(v.Body[0])
+	case *parser.Atom, *parser.MathOrd, *parser.TextOrd:
+		return true
+	}
+	return false
+}
+
+// layoutCancel handles \cancel{body} (`/`), \bcancel{body} (`\`),
+// \xcancel{body} (`X`), \sout{body} (`-`). Mirrors upstream layout_cancel.
+//
+// Single-character bodies use vertical padding (line corner-to-corner of
+// h+d+0.4 box); multi-character bodies use horizontal padding (line
+// extends 0.2em past each edge). \sout draws a horizontal line at
+// -0.5*xHeight regardless.
+func layoutCancel(label string, node parser.Node, opts Options) *Box {
+	inner := layoutNode(node, opts)
+	w := inner.Width
+	if w < 0.01 {
+		w = 0.01
+	}
+	h, d := inner.Height, inner.Depth
+
+	single := isSingleCharBody(node)
+	var vPad, hPad float64
+	switch {
+	case label == `\sout`:
+		// no padding
+	case single:
+		vPad = 0.2
+	default:
+		hPad = 0.2
+	}
+
+	var cmds []path.Command
+	switch label {
+	case `\cancel`:
+		cmds = []path.Command{
+			path.MoveTo(-hPad, d+vPad),
+			path.LineTo(w+hPad, -h-vPad),
+		}
+	case `\bcancel`:
+		cmds = []path.Command{
+			path.MoveTo(-hPad, -h-vPad),
+			path.LineTo(w+hPad, d+vPad),
+		}
+	case `\xcancel`:
+		cmds = []path.Command{
+			path.MoveTo(-hPad, d+vPad),
+			path.LineTo(w+hPad, -h-vPad),
+			path.MoveTo(-hPad, -h-vPad),
+			path.LineTo(w+hPad, d+vPad),
+		}
+	case `\sout`:
+		midY := -0.5 * opts.Metrics().XHeight
+		cmds = []path.Command{
+			path.MoveTo(0, midY),
+			path.LineTo(w, midY),
+		}
+	}
+
+	lineW := w + 2*hPad
+	lineH := h + vPad
+	lineD := d + vPad
+	lineBox := &Box{
+		Width: lineW, Height: lineH, Depth: lineD, Color: opts.Color,
+		Content: SvgPath{Commands: cmds, Fill: false},
+	}
+	// Body kerned back to overlap the line box: kern = -(line_w - h_pad).
+	kern := -(lineW - hPad)
+	bodyShifted := makeHBox([]*Box{NewKern(kern), inner}, opts.Color)
+	return &Box{
+		Width: w, Height: h, Depth: d, Color: opts.Color,
+		Content: HBox{Children: []*Box{lineBox, bodyShifted}},
+	}
+}
+
 // layoutAngl is `\angl{body}` — actuarial angle: a horizontal roof
 // above the body and a vertical bar on the right (KaTeX style).
 //

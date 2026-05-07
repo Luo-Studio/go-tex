@@ -470,6 +470,18 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 		// (y + Box.Height - Shift), i.e. raised by Shift relative to
 		// the box's baseline.
 		emit(c.Body, dl, x, y, scale)
+	case SvgPath:
+		// Path coords are in body-relative em with y measured from
+		// baseline (negative = up).
+		baselineY := y + b.Height*scale
+		scaled := make([]path.Command, len(c.Commands))
+		for i, cmd := range c.Commands {
+			scaled[i] = scalePathCommand(cmd, scale)
+		}
+		dl.Items = append(dl.Items, PathItem{
+			X: x, Y: baselineY,
+			Commands: scaled, Fill: c.Fill, Color: b.Color,
+		})
 	case Angl:
 		// Body shares baseline at y + b.Height*scale. Path commands are
 		// in body-relative em with y measured from baseline (negative =
