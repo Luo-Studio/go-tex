@@ -25,7 +25,7 @@ func parseEnclose(p *Parser) (Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		body, err := parseFunctionArg(p, cmd)
+		body, err := parseTextModeArg(p, cmd)
 		if err != nil {
 			return nil, err
 		}
@@ -40,7 +40,7 @@ func parseEnclose(p *Parser) (Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		body, err := parseFunctionArg(p, cmd)
+		body, err := parseTextModeArg(p, cmd)
 		if err != nil {
 			return nil, err
 		}
@@ -49,6 +49,20 @@ func parseEnclose(p *Parser) (Node, error) {
 		return &Enclose{Mode: p.mode, Label: cmd, BorderColor: &bc, BackgroundColor: &bg, Body: body}, nil
 	}
 	return nil, errAt("unknown enclose function "+cmd, p.cur)
+}
+
+// parseTextModeArg parses a function arg in text mode regardless of the
+// outer mode. Used by commands like \colorbox/\fcolorbox where the body
+// is rendered as text per upstream's ArgType::Text.
+func parseTextModeArg(p *Parser, name string) (Node, error) {
+	prev := p.mode
+	p.switchMode(ModeText)
+	arg, err := parseFunctionArg(p, name)
+	p.switchMode(prev)
+	if err != nil {
+		return nil, err
+	}
+	return arg, nil
 }
 
 // =============================================================================
