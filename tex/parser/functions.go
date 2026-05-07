@@ -62,6 +62,9 @@ func functionDispatch(p *Parser, callerName, breakOnText string) (Node, error) {
 	if cmd == `\mathop` {
 		return parseMathOp(p)
 	}
+	if cmd == `\kern` || cmd == `\mkern` || cmd == `\hskip` || cmd == `\mskip` {
+		return parseKern(p)
+	}
 	if node, ok := parseOpFunction(p); ok {
 		return node, nil
 	}

@@ -46,6 +46,7 @@ func scoreFile(t *testing.T, r *os.File, upstream string) (match, count int, exa
 	t.Helper()
 	s := bufio.NewScanner(r)
 	s.Buffer(make([]byte, 1<<16), 1<<20)
+	byteMatch := 0
 	for s.Scan() {
 		expr := strings.TrimSpace(s.Text())
 		if expr == "" {
@@ -54,6 +55,9 @@ func scoreFile(t *testing.T, r *os.File, upstream string) (match, count int, exa
 		count++
 		goOut, _ := goParseLine(expr)
 		rustOut := upstreamParseLine(t, upstream, expr)
+		if goOut == rustOut {
+			byteMatch++
+		}
 		if jsonsEqual(goOut, rustOut) {
 			match++
 		}
@@ -61,6 +65,7 @@ func scoreFile(t *testing.T, r *os.File, upstream string) (match, count int, exa
 	if err := s.Err(); err != nil {
 		t.Fatalf("scan: %v", err)
 	}
+	t.Logf("    (byte-identical: %d/%d, %.2f%%)", byteMatch, count, percent(byteMatch, count))
 	return match, count, examples
 }
 

@@ -5,6 +5,7 @@ package parser
 
 import (
 	"encoding/json"
+	"strconv"
 
 	"github.com/luo-studio/go-tex/tex/source"
 )
@@ -107,6 +108,40 @@ const (
 type Measurement struct {
 	Number float64 `json:"number"`
 	Unit   string  `json:"unit"`
+}
+
+// MarshalJSON renders the Number with at least one decimal digit so the
+// output matches upstream serde's f64 serialization (3 → "3.0", not "3").
+func (m Measurement) MarshalJSON() ([]byte, error) {
+	return []byte(`{"number":` + formatFloat(m.Number) + `,"unit":` + jsonString(m.Unit) + `}`), nil
+}
+
+// formatFloat serializes f matching Rust serde's f64 output: whole numbers
+// get a trailing ".0", other values use Go's %g shortest form.
+func formatFloat(f float64) string {
+	// Use the shortest representation that round-trips.
+	s := strconv.FormatFloat(f, 'g', -1, 64)
+	// Detect "whole" number forms (no '.' and no 'e'/'E') and add ".0".
+	hasDot := false
+	hasExp := false
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '.':
+			hasDot = true
+		case 'e', 'E':
+			hasExp = true
+		}
+	}
+	if !hasDot && !hasExp {
+		s += ".0"
+	}
+	return s
+}
+
+// jsonString quotes s for JSON. Uses encoding/json's MarshalString.
+func jsonString(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
 }
 
 // Loc is a pointer alias for source.Location so we can omit absent locations.
