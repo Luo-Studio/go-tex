@@ -153,6 +153,64 @@ func layoutNode(n parser.Node, opts Options) *Box {
 		return NewEmpty()
 	case *parser.Array:
 		return layoutArray(v, opts)
+	case *parser.Enclose:
+		// Minimal Enclose: lay out body. Background/border drawing not
+		// yet emitted. \\angl draws an actuarial angle path on top
+		// (added in displaylist emit).
+		body, isBody := v.Body, true
+		if !isBody {
+			body = nil
+		}
+		bb := layoutNode(body, opts)
+		return bb
+	case *parser.HorizBrace:
+		// Stub: just lay out base.
+		return layoutNode(v.Base, opts)
+	case *parser.RaiseBox:
+		bb := layoutNode(v.Body, opts)
+		return bb
+	case *parser.MathChoice:
+		// Pick the right branch based on current style.
+		var body []parser.Node
+		switch {
+		case opts.Style.IsDisplay():
+			body = v.Display
+		case opts.Style.IsTight():
+			if opts.Style.SizeIndex() >= 2 {
+				body = v.ScriptScript
+			} else {
+				body = v.Script
+			}
+		default:
+			body = v.Text
+		}
+		return layoutExpression(body, opts, true)
+	case *parser.HtmlMathMl:
+		// Render the html branch (the visible part).
+		return layoutExpression(v.Html, opts, true)
+	case *parser.Verb:
+		// Lay out the body chars in Typewriter-Regular.
+		fontOpts := opts
+		fontOpts.FontOverride = "Typewriter-Regular"
+		children := []*Box{}
+		for _, r := range v.Body {
+			cm, ok := fontmetrics.Lookup("Typewriter-Regular", r)
+			if !ok {
+				continue
+			}
+			children = append(children, &Box{
+				Width: cm.Width, Height: cm.Height, Depth: cm.Depth, Color: opts.Color,
+				Content: Glyph{FontID: "Typewriter-Regular", CharCode: r},
+			})
+		}
+		return makeHBox(children, opts.Color)
+	case *parser.Cr, *parser.Infix, *parser.Middle,
+		*parser.LeftRightRight, *parser.Sizing, *parser.DelimSizing,
+		*parser.XArrow, *parser.Lap, *parser.VCenter, *parser.Tag,
+		*parser.Pmb, *parser.Href, *parser.URL:
+		// TODO: full layout for these; for now just lay out subtrees we
+		// know how to handle, otherwise empty.
+		return NewEmpty()
 	}
 	// Fallback for unhandled node types — emit an empty box rather than
 	// crashing so the test harness can still score the rest.
