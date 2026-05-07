@@ -83,17 +83,42 @@ func parseSizeGroup(p *Parser, cmd string) (*Measurement, error) {
 		}
 		return &Measurement{Number: num, Unit: unit}, nil
 	}
-	// Unbraced: read digits and trailing unit letters from a single (or
-	// adjacent) tokens until a non-digit/non-letter is seen.
+	// Unbraced: read digits/sign/dot first, then AT MOST 2 trailing
+	// letters as the unit. Mirrors upstream's
+	// `^[-+]? *(?:$|\d+|\d+\.\d*|\.\d*) *[a-z]{0,2} *$` regex which
+	// caps the unit at 2 chars so e.g. `\kern-.125emX` consumes `em`
+	// and leaves `X` for the next token.
 	var raw strings.Builder
 	for !p.cur.IsEOF() {
 		t := p.cur.Text
-		if isAllDigitsOrSign(t) || isLetterRun(t) || t == "." {
+		if isAllDigitsOrSign(t) || t == "." {
 			raw.WriteString(t)
 			p.advance()
 			continue
 		}
 		break
+	}
+	// Now consume at most 2 letters for the unit.
+	letters := 0
+	for !p.cur.IsEOF() && letters < 2 {
+		t := p.cur.Text
+		if !isLetterRun(t) {
+			break
+		}
+		// If a single token has multiple letters, take only enough to
+		// reach 2 total.
+		take := 2 - letters
+		if len(t) <= take {
+			raw.WriteString(t)
+			letters += len(t)
+			p.advance()
+		} else {
+			raw.WriteString(t[:take])
+			// Replace the current token with the remainder so it stays
+			// in the stream (gullet will re-emit on next advance).
+			p.cur.Text = t[take:]
+			letters = 2
+		}
 	}
 	s := strings.TrimSpace(raw.String())
 	if s == "" {

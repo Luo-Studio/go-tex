@@ -216,8 +216,18 @@ func layoutNode(n parser.Node, opts Options) *Box {
 		// Stub: just lay out base.
 		return layoutNode(v.Base, opts)
 	case *parser.RaiseBox:
+		// \raisebox{dy}{body}: positive shift moves body up.
+		shift := measurementToEm(v.Dy, opts)
 		bb := layoutNode(v.Body, opts)
-		return bb
+		h := bb.Height + shift
+		d := bb.Depth - shift
+		if d < 0 {
+			d = 0
+		}
+		return &Box{
+			Width: bb.Width, Height: h, Depth: d, Color: opts.Color,
+			Content: RaiseBox{Body: bb, Shift: shift},
+		}
 	case *parser.MathChoice:
 		// Pick the right branch based on current style.
 		var body []parser.Node

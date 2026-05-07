@@ -77,7 +77,7 @@ func measurementToEm(m parser.Measurement, opts Options) float64 {
 	case "em":
 		return m.Number
 	case "ex":
-		return m.Number * 0.43055
+		return m.Number * opts.Metrics().XHeight
 	case "mu":
 		return muToEm(m.Number, opts.Metrics().Quad)
 	case "pt":
