@@ -124,8 +124,11 @@ func layoutNode(n parser.Node, opts Options) *Box {
 	case *parser.SupSub:
 		return layoutSupSubNode(v.Base, v.Sup, v.Sub, opts)
 	case *parser.Color:
-		// Colors flow through; we don't track them in width/height.
-		return layoutExpression(v.Body, opts.WithColor(opts.Color), true)
+		newColor := opts.Color
+		if c, ok := parseColor(v.Color); ok {
+			newColor = c
+		}
+		return layoutExpression(v.Body, opts.WithColor(newColor), true)
 	case *parser.Font:
 		// Map mathXX -> KaTeX font name (e.g. mathrm -> Main-Regular,
 		// mathbf -> Main-Bold). For unknown families, fall back to no
