@@ -710,7 +710,7 @@ func handleNewCommand(allowNew, allowExisting bool) FnMacro {
 			}
 			body = append(body, tt)
 		}
-		if e.HasMacro(name) && allowExisting && !allowNew {
+		if e.HasMacro(name) && allowNew && allowExisting {
 			// providecommand: keep existing definition, discard new one.
 			return nil, nil
 		}
