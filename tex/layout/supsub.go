@@ -33,7 +33,15 @@ func layoutOpWithLimits(base parser.Node, sup, sub parser.Node, opts Options) *B
 		if v.SuppressBaseShift != nil && *v.SuppressBaseShift {
 			suppressBaseShift = true
 		}
-		baseBox = layoutOp(v, opts)
+		// Mirror upstream build_op_base: for body ops we want the raw
+		// laid-out body without the math-axis raise that layoutOp adds
+		// for user-defined \mathop{...}. For named symbol/text ops we
+		// want layoutOpSymbol / layoutOp's name path.
+		if v.Body != nil && len(v.Body) > 0 {
+			baseBox = layoutExpression(v.Body, opts, true)
+		} else {
+			baseBox = layoutOp(v, opts)
+		}
 	case *parser.OperatorName:
 		baseBox = layoutOperatorName(v, opts)
 	default:
