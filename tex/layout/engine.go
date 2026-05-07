@@ -112,6 +112,33 @@ func layoutNode(n parser.Node, opts Options) *Box {
 		return &Box{Width: 0, Height: b.Height, Depth: b.Depth, Color: opts.Color, Content: Empty{}}
 	case *parser.HBox:
 		return layoutExpression(v.Body, opts, true)
+	case *parser.Text:
+		// Text mode: lay out each child glyph using Main-Regular (or the
+		// font implied by v.Font). Spacing inside text is plain
+		// horizontal concatenation without atom-class glue.
+		return layoutTextBody(v.Body, opts)
+	case *parser.Kern:
+		// Kern boxes have width but no height/depth. Unit conversion
+		// from the parsed measurement; mu uses the current quad.
+		return NewKern(measurementToEm(v.Dimension, opts))
+	case *parser.Op:
+		return layoutOp(v, opts)
+	case *parser.OperatorName:
+		return layoutOperatorName(v, opts)
+	case *parser.Accent:
+		return layoutAccent(v, opts)
+	case *parser.AccentUnder:
+		return layoutAccentUnder(v, opts)
+	case *parser.Sqrt:
+		return layoutSqrt(v, opts)
+	case *parser.LeftRight:
+		return layoutLeftRight(v, opts)
+	case *parser.Overline:
+		return layoutOverline(v, opts)
+	case *parser.Underline:
+		return layoutUnderline(v, opts)
+	case *parser.Internal, *parser.NoNumber:
+		return NewEmpty()
 	}
 	// Fallback for unhandled node types — emit an empty box rather than
 	// crashing so the test harness can still score the rest.
