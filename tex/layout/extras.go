@@ -1069,6 +1069,54 @@ func layoutCancel(label string, node parser.Node, opts Options) *Box {
 	}
 }
 
+// layoutPhase is `\phase{body}` — angle notation: body with diagonal
+// "phasor" mark below + horizontal underline above. Mirrors upstream
+// layout_phase.
+func layoutPhase(node parser.Node, opts Options) *Box {
+	m := opts.Metrics()
+	inner := layoutNode(node, opts)
+	lineWeight := 0.6 / m.PtPerEm
+	clearance := 0.35 * m.XHeight
+	angleH := inner.Height + inner.Depth + lineWeight + clearance
+	leftPad := angleH/2 + lineWeight
+	w := inner.Width + leftPad
+	ySvg := 1000 * angleH
+	if ySvg < 80 {
+		ySvg = 80
+	}
+	// floor
+	ySvg = float64(int64(ySvg))
+	sy := angleH / ySvg
+	sx := sy
+	rightX := 400000 * sx
+	if rightX > w {
+		rightX = w
+	}
+	bottomY := inner.Depth + lineWeight + clearance
+	vy := func(ys float64) float64 { return bottomY - (ySvg-ys)*sy }
+	xPeak := ySvg / 2
+	cmds := []path.Command{
+		path.MoveTo(rightX, vy(ySvg)),
+		path.LineTo(0, vy(ySvg)),
+		path.LineTo(xPeak*sx, vy(0)),
+		path.LineTo((xPeak+65)*sx, vy(45)),
+		path.LineTo(145*sx, vy(ySvg-80)),
+		path.LineTo(rightX, vy(ySvg-80)),
+		{Kind: path.KindClose},
+	}
+	bodyShifted := makeHBox([]*Box{NewKern(leftPad), inner}, opts.Color)
+	pathH := inner.Height
+	pathD := bottomY
+	pathBox := &Box{
+		Width: w, Height: pathH, Depth: pathD, Color: opts.Color,
+		Content: SvgPath{Commands: cmds, Fill: true},
+	}
+	return &Box{
+		Width: w, Height: pathH, Depth: pathD, Color: opts.Color,
+		Content: HBox{Children: []*Box{pathBox, NewKern(-w), bodyShifted}},
+	}
+}
+
 // layoutAngl is `\angl{body}` — actuarial angle: a horizontal roof
 // above the body and a vertical bar on the right (KaTeX style).
 //

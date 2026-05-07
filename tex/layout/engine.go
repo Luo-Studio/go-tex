@@ -286,6 +286,8 @@ func layoutNode(n parser.Node, opts Options) *Box {
 		switch v.Label {
 		case `\angl`:
 			return layoutAngl(v.Body, opts)
+		case `\phase`:
+			return layoutPhase(v.Body, opts)
 		case `\cancel`, `\bcancel`, `\xcancel`, `\sout`:
 			return layoutCancel(v.Label, v.Body, opts)
 		case `\fbox`, `\fcolorbox`, `\colorbox`:
