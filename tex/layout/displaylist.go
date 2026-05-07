@@ -366,7 +366,7 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 		if c.Sub != nil {
 			subScale := scale * c.SubScale
 			subTop := y + (b.Height+c.SubShift)*scale - c.Sub.Height*subScale
-			emit(c.Sub, dl, x+baseW, subTop, subScale)
+			emit(c.Sub, dl, x+baseW+c.SubHKern*scale, subTop, subScale)
 		}
 	case Overline:
 		// Box height = body.height + 3*rt. Body sits at the bottom of the

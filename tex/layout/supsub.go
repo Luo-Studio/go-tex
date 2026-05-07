@@ -253,6 +253,14 @@ func layoutSupSubNode(base, sup, sub parser.Node, opts Options) *Box {
 		supShift = max64(max64(supShift, minSupShift), supD+0.25*metrics.XHeight)
 	}
 
+	// KaTeX supsub.js: for SymbolNode bases, subscripts get
+	// margin-left: -base.italic so they don't shift right with the italic
+	// correction (e.g. ∫_{A_1}). Mirrors upstream sub_h_kern.
+	subHKern := 0.0
+	if subBox != nil {
+		subHKern = -opSymbolSlant(baseBox)
+	}
+
 	height := baseBox.Height
 	depth := baseBox.Depth
 	totalWidth := baseBox.Width
@@ -269,7 +277,7 @@ func layoutSupSubNode(base, sup, sub parser.Node, opts Options) *Box {
 		if d := subShift + subD; d > depth {
 			depth = d
 		}
-		if w := baseBox.Width + subBox.Width*subRatio + scriptSpace; w > totalWidth {
+		if w := baseBox.Width + subHKern + subBox.Width*subRatio + scriptSpace; w > totalWidth {
 			totalWidth = w
 		}
 	}
@@ -287,6 +295,7 @@ func layoutSupSubNode(base, sup, sub parser.Node, opts Options) *Box {
 			SubShift: subShift,
 			SupScale: supRatio,
 			SubScale: subRatio,
+			SubHKern: subHKern,
 		},
 	}
 }
