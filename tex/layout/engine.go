@@ -13,6 +13,13 @@ func layoutExpression(nodes []parser.Node, opts Options, isRealGroup bool) *Box 
 	if len(nodes) == 0 {
 		return NewEmpty()
 	}
+	// Line-break (\\ / \newline) splits the expression into rows stacked
+	// in a VBox. Mirrors upstream layout_multiline.
+	for _, n := range nodes {
+		if _, ok := n.(*parser.Cr); ok {
+			return layoutMultiline(nodes, opts, isRealGroup)
+		}
+	}
 	raw := make([]optClass, len(nodes))
 	for i, n := range nodes {
 		c, ok := nodeMathClass(n)
@@ -45,6 +52,59 @@ func layoutExpression(nodes []parser.Node, opts Options, isRealGroup bool) *Box 
 		}
 	}
 	return makeHBox(children, opts.Color)
+}
+
+// layoutMultiline splits nodes at Cr boundaries, lays out each row,
+// and stacks them in a VBox with TeX baselineskip/lineskip gaps.
+// Mirrors upstream layout_multiline.
+func layoutMultiline(nodes []parser.Node, opts Options, isRealGroup bool) *Box {
+	m := opts.Metrics()
+	pt := 1.0 / m.PtPerEm
+	baselineSkip := 12.0 * pt
+	lineSkip := 1.0 * pt
+
+	var rows [][]parser.Node
+	start := 0
+	for i, n := range nodes {
+		if _, isCr := n.(*parser.Cr); isCr {
+			rows = append(rows, nodes[start:i])
+			start = i + 1
+		}
+	}
+	rows = append(rows, nodes[start:])
+
+	rowBoxes := make([]*Box, len(rows))
+	totalW := 0.0
+	for i, row := range rows {
+		rowBoxes[i] = layoutExpression(row, opts, isRealGroup)
+		if rowBoxes[i].Width > totalW {
+			totalW = rowBoxes[i].Width
+		}
+	}
+
+	var children []VBoxChild
+	h := 0.0
+	d := 0.0
+	if len(rowBoxes) > 0 {
+		h = rowBoxes[0].Height
+		d = rowBoxes[len(rowBoxes)-1].Depth
+	}
+	for i, row := range rowBoxes {
+		if i > 0 {
+			prevD := rowBoxes[i-1].Depth
+			gap := baselineSkip - prevD - row.Height
+			if gap < lineSkip {
+				gap = lineSkip
+			}
+			children = append(children, VBoxChild{Kind: VBoxKern{Em: gap}})
+			h += gap + row.Height + prevD
+		}
+		children = append(children, VBoxChild{Kind: VBoxBox{Box: row}})
+	}
+	return &Box{
+		Width: totalW, Height: h, Depth: d, Color: opts.Color,
+		Content: VBox{Children: children},
+	}
 }
 
 // layoutNode is the sum-type dispatcher for a single ParseNode.
