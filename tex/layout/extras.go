@@ -209,8 +209,17 @@ func layoutOpSymbol(name string, opts Options) *Box {
 	if !found {
 		return layoutSymbol(name, parser.ModeMath, opts)
 	}
+	// Center symbol op on the math axis (TeX Rule 13a). Mirrors
+	// upstream layout_op: only applies when |shift| > 0.001.
+	h, d := cm.Height, cm.Depth
+	axis := opts.Metrics().AxisHeight
+	shift := (h-d)/2 - axis
+	if shift > 0.001 || shift < -0.001 {
+		h -= shift
+		d += shift
+	}
 	return &Box{
-		Width: cm.Width + cm.Italic, Height: cm.Height, Depth: cm.Depth, Color: opts.Color,
+		Width: cm.Width + cm.Italic, Height: h, Depth: d, Color: opts.Color,
 		Content: Glyph{FontID: font, CharCode: cp},
 	}
 }
