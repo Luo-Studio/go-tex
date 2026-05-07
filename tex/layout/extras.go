@@ -135,6 +135,7 @@ func layoutOperatorName(op *parser.OperatorName, opts Options) *Box {
 // symbols table records for it. (These differ from the Unicode "modifier
 // letter" forms — KaTeX uses the ASCII caret `^` for `\hat`, etc.)
 var accentChar = map[string]rune{
+	// Math-mode accents.
 	`\hat`:       '^',
 	`\widehat`:   '^',
 	`\check`:     0x02C7, // ˇ
@@ -149,6 +150,19 @@ var accentChar = map[string]rune{
 	`\breve`:     0x02D8,
 	`\vec`:       0x20D7,
 	`\mathring`:  0x02DA,
+	// Text-mode accents from upstream's accent-token table.
+	`\'`:         0x02CA, // ˊ
+	"\\`":        '`',
+	`\^`:         '^',
+	`\~`:         '~',
+	`\=`:         0x02C9,
+	`\u`:         0x02D8,
+	`\.`:         0x02D9,
+	`\"`:         0x00A8,
+	`\r`:         0x02DA,
+	`\H`:         0x02DD, // ˝
+	`\v`:         0x02C7,
+	`\c`:         0x00B8, // ¸
 }
 
 // layoutAccent stacks a math accent glyph above the base.
@@ -169,13 +183,43 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 		Width: cm.Width, Height: cm.Height, Depth: cm.Depth, Color: opts.Color,
 		Content: Glyph{FontID: fontmetrics.FontMainRegular, CharCode: cp},
 	}
-	// KaTeX caps the accent's visible height contribution at 0.35em
-	// (handle_accent_clearance in upstream engine.rs).
-	visibleAccent := cm.Height
-	if visibleAccent > 0.35 {
-		visibleAccent = 0.35
+	xHeight := opts.Metrics().XHeight
+	visCap := cm.Height
+	if visCap > 0.35 {
+		visCap = 0.35
 	}
-	height := base.Height + visibleAccent
+	// Mirrors upstream handle_accent_clearance for non-stretchy, non-arrow,
+	// non-nested-Accent bodies.
+	katexPos := base.Height - xHeight
+	if katexPos < 0 {
+		katexPos = 0
+	}
+	correction := cm.Height - visCap
+	if correction < 0 {
+		correction = 0
+	}
+	clearance := katexPos + correction + cm.Depth
+	if a.Label == `\bar` || a.Label == `\=` {
+		clearance -= 0.12
+		if clearance < 0 {
+			clearance = 0
+		}
+	}
+	accentVisualTop := clearance + visCap
+	height := 0.0
+	switch a.Label {
+	case `\hat`, `\bar`, `\=`, `\dot`, `\ddot`:
+		const strut = 0.78056
+		height = accentVisualTop
+		if strut > height {
+			height = strut
+		}
+	default:
+		height = base.Height
+		if accentVisualTop > height {
+			height = accentVisualTop
+		}
+	}
 	return &Box{
 		Width:  base.Width,
 		Height: height,
@@ -185,6 +229,7 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 			Base:      base,
 			AccentBox: accentBox,
 			Skew:      skew,
+			Clearance: clearance,
 		},
 	}
 }
