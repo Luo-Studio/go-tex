@@ -75,7 +75,7 @@ func layoutSpacingNode(text string, opts Options) *Box {
 		return NewKern(-4.0 / 18.0 * q)
 	case `\negthickspace`:
 		return NewKern(-5.0 / 18.0 * q)
-	case `\nobreakspace`, " ":
+	case `\nobreakspace`, " ", `\space`:
 		return NewKern(0.25)
 	case `\ `, `\\ `:
 		return NewKern(0.25)

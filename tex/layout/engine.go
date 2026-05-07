@@ -374,6 +374,30 @@ func layoutNode(n parser.Node, opts Options) *Box {
 			Color: linkColor,
 			Content: Underline{Body: inner, RuleThickness: rt},
 		}
+	case *parser.Rule:
+		w := measurementToEm(v.Width, opts)
+		h := measurementToEm(v.Height, opts)
+		shift := 0.0
+		if v.Shift != nil {
+			shift = measurementToEm(*v.Shift, opts)
+		}
+		// shift > 0 → ink raised above baseline (bottom = baseline + 0).
+		// In our (top-left) convention: rule occupies the visible band.
+		// We model it as a Rule content with thickness=h, with depth=-shift
+		// when shift > 0 (the bottom is `shift` above the baseline).
+		// For dim parity: box height = h + shift if shift > 0 else h, depth = -shift if negative.
+		boxH := h + shift
+		if boxH < 0 {
+			boxH = 0
+		}
+		boxD := -shift
+		if boxD < 0 {
+			boxD = 0
+		}
+		return &Box{
+			Width: w, Height: boxH, Depth: boxD, Color: opts.Color,
+			Content: Rule{Thickness: h, Raise: shift},
+		}
 	case *parser.Lap:
 		inner := layoutNode(v.Body, opts)
 		shift := 0.0
