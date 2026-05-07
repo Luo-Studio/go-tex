@@ -70,13 +70,18 @@ func ToDisplayList(b *Box) DisplayList {
 }
 
 // emit recursively walks b, appending DisplayItems with absolute positions.
-// (x, y) is the top-left of b, scale is the cumulative scale factor.
+//
+// Convention: (x, y) is the top-left of b in PARENT em units. The box's
+// own Width/Height/Depth are in CHILD em (the box's design size).
+// scale converts child em to parent em — child * scale = parent.
+//
+// So a glyph's baseline in parent em is `y + b.Height*scale`.
 func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 	switch c := b.Content.(type) {
 	case Glyph:
 		dl.Items = append(dl.Items, GlyphPath{
 			X:        x,
-			Y:        y + b.Height,
+			Y:        y + b.Height*scale,
 			Scale:    scale,
 			Font:     c.FontID,
 			CharCode: c.CharCode,
@@ -84,77 +89,99 @@ func emit(b *Box, dl *DisplayList, x, y, scale float64) {
 		})
 	case Rule:
 		dl.Items = append(dl.Items, Rect{
-			X: x, Y: y, Width: b.Width, Height: c.Thickness, Color: b.Color,
+			X: x, Y: y, Width: b.Width * scale, Height: c.Thickness * scale, Color: b.Color,
 		})
 	case HBox:
 		cx := x
 		for _, ch := range c.Children {
-			emit(ch, dl, cx, y+(b.Height-ch.Height), scale)
-			cx += ch.Width
+			emit(ch, dl, cx, y+(b.Height-ch.Height)*scale, scale)
+			cx += ch.Width * scale
 		}
 	case VBox:
 		cy := y
 		for _, ch := range c.Children {
 			switch k := ch.Kind.(type) {
 			case VBoxBox:
-				emit(k.Box, dl, x, cy+ch.Shift, scale)
-				cy += k.Box.TotalHeight()
+				emit(k.Box, dl, x, cy+ch.Shift*scale, scale)
+				cy += k.Box.TotalHeight() * scale
 			case VBoxKern:
-				cy += k.Em
+				cy += k.Em * scale
 			}
 		}
 	case Fraction:
-		// Numerator: top-aligned within numer_height area.
-		// Position numer so its baseline sits at b.height - numer_shift
-		// (i.e. numer_shift above the axis).
-		numerW := c.Numer.Width * c.NumerScale
-		numerCenterX := x + (b.Width-numerW)/2
-		numerY := y + b.Height - c.NumerShift - c.Numer.Height*c.NumerScale
-		emit(c.Numer, dl, numerCenterX, numerY, scale*c.NumerScale)
-		// Denominator: positioned with baseline at axis - denom_shift below.
-		denomW := c.Denom.Width * c.DenomScale
-		denomCenterX := x + (b.Width-denomW)/2
-		denomY := y + b.Height + c.DenomShift - c.Denom.Height*c.DenomScale
-		emit(c.Denom, dl, denomCenterX, denomY, scale*c.DenomScale)
-		// Bar at the axis (b.height - axis_height).
+		// Bar / shifts are in parent em (computed from parent metrics).
+		numerScale := scale * c.NumerScale
+		denomScale := scale * c.DenomScale
+		numerWParent := c.Numer.Width * numerScale
+		denomWParent := c.Denom.Width * denomScale
+		numerCenterX := x + (b.Width*scale-numerWParent)/2
+		denomCenterX := x + (b.Width*scale-denomWParent)/2
+		numerY := y + (b.Height-c.NumerShift)*scale - c.Numer.Height*numerScale
+		denomY := y + (b.Height+c.DenomShift)*scale - c.Denom.Height*denomScale
+		emit(c.Numer, dl, numerCenterX, numerY, numerScale)
+		emit(c.Denom, dl, denomCenterX, denomY, denomScale)
 		if c.BarThickness > 0 {
-			// axis_height ~ 0.25em at textstyle. We don't have direct access
-			// here; the bar y comes from b.Height - axis_height (parent's
-			// metrics axis was set at layout time). Use 0.25 fallback.
-			axis := 0.25
-			barY := y + b.Height - axis
+			axis := 0.25 // approximate axis_height
+			barY := y + (b.Height-axis)*scale
 			dl.Items = append(dl.Items, Line{
 				X:         x,
 				Y:         barY,
-				Width:     b.Width,
-				Thickness: c.BarThickness,
+				Width:     b.Width * scale,
+				Thickness: c.BarThickness * scale,
 				Color:     b.Color,
 			})
 		}
 	case SupSub:
-		// Base sits at the same baseline as the box.
-		emit(c.Base, dl, x, y+(b.Height-c.Base.Height), scale)
-		baseW := c.Base.Width
+		// Base baseline at y + b.Height*scale.
+		emit(c.Base, dl, x, y+(b.Height-c.Base.Height)*scale, scale)
+		baseW := c.Base.Width * scale
 		if c.Sup != nil {
-			supW := c.Sup.Width * c.SupScale
-			_ = supW
-			emit(c.Sup, dl, x+baseW, y+(b.Height-c.SupShift-c.Sup.Height*c.SupScale), scale*c.SupScale)
+			supScale := scale * c.SupScale
+			supTop := y + (b.Height-c.SupShift)*scale - c.Sup.Height*supScale
+			emit(c.Sup, dl, x+baseW, supTop, supScale)
 		}
 		if c.Sub != nil {
-			emit(c.Sub, dl, x+baseW, y+(b.Height+c.SubShift-c.Sub.Height*c.SubScale), scale*c.SubScale)
+			subScale := scale * c.SubScale
+			subTop := y + (b.Height+c.SubShift)*scale - c.Sub.Height*subScale
+			emit(c.Sub, dl, x+baseW, subTop, subScale)
 		}
 	case Overline:
-		emit(c.Body, dl, x, y+4*c.RuleThickness, scale)
-		dl.Items = append(dl.Items, Line{X: x, Y: y + 2*c.RuleThickness, Width: b.Width, Thickness: c.RuleThickness, Color: b.Color})
+		emit(c.Body, dl, x, y+4*c.RuleThickness*scale, scale)
+		dl.Items = append(dl.Items, Line{
+			X: x, Y: y + 2*c.RuleThickness*scale,
+			Width: b.Width * scale, Thickness: c.RuleThickness * scale, Color: b.Color,
+		})
 	case Underline:
 		emit(c.Body, dl, x, y, scale)
-		dl.Items = append(dl.Items, Line{X: x, Y: y + b.Height + b.Depth - 2*c.RuleThickness, Width: b.Width, Thickness: c.RuleThickness, Color: b.Color})
+		dl.Items = append(dl.Items, Line{
+			X: x, Y: y + (b.Height+b.Depth-2*c.RuleThickness)*scale,
+			Width: b.Width * scale, Thickness: c.RuleThickness * scale, Color: b.Color,
+		})
 	case LeftRight:
 		emit(c.Inner, dl, x, y, scale)
 	case Radical:
-		// Surd glyph would go on the left; we don't draw it yet, but the
-		// body needs to be placed right of the surd allowance (~0.5em).
-		emit(c.Body, dl, x+0.5, y, scale)
+		// Surd glyph at left, baseline at body baseline.
+		baselineY := y + b.Height*scale
+		dl.Items = append(dl.Items, GlyphPath{
+			X:        x,
+			Y:        baselineY,
+			Scale:    scale,
+			Font:     "Main-Regular",
+			CharCode: 0x221A,
+			Color:    b.Color,
+		})
+		// Body shifted right by the surd width (IndexOffset).
+		bodyX := x + c.IndexOffset*scale
+		bodyY := y + 4*c.RuleThickness*scale
+		emit(c.Body, dl, bodyX, bodyY, scale)
+		// Overline rule above the body.
+		dl.Items = append(dl.Items, Line{
+			X:         bodyX,
+			Y:         y + 2*c.RuleThickness*scale,
+			Width:     c.Body.Width * scale,
+			Thickness: c.RuleThickness * scale,
+			Color:     b.Color,
+		})
 	case Empty, Kern:
 		// no items
 	}
