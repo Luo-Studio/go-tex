@@ -3,6 +3,8 @@ package parser
 import (
 	"fmt"
 	"strings"
+
+	"github.com/luo-studio/go-tex/tex/source"
 )
 
 // functionDispatch handles the registry of LaTeX commands the parser knows.
@@ -248,13 +250,27 @@ func parseFrac(p *Parser) (Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &GenFrac{
+	frac := &GenFrac{
 		Mode:       p.mode,
 		Continued:  cmd == `\cfrac`,
 		Numer:      numer,
 		Denom:      denom,
 		HasBarLine: true,
-	}, nil
+	}
+	return wrapFracStyle(p, cmd, frac), nil
+}
+
+// wrapFracStyle wraps a GenFrac in a Styling node when the command name
+// implies a style (\dfrac/\dbinom -> display, \tfrac/\tbinom -> text,
+// \cfrac -> display). Mirrors upstream's handle_frac.
+func wrapFracStyle(p *Parser, cmd string, frac Node) Node {
+	if cmd == `\cfrac` || (len(cmd) > 1 && cmd[1] == 'd') {
+		return &Styling{Mode: p.mode, Style: StyleDisplay, Body: []Node{frac}}
+	}
+	if len(cmd) > 1 && cmd[1] == 't' {
+		return &Styling{Mode: p.mode, Style: StyleText, Body: []Node{frac}}
+	}
+	return frac
 }
 
 func parseBinom(p *Parser) (Node, error) {
@@ -270,14 +286,15 @@ func parseBinom(p *Parser) (Node, error) {
 	}
 	left := "("
 	right := ")"
-	return &GenFrac{
+	frac := &GenFrac{
 		Mode:       p.mode,
 		Numer:      numer,
 		Denom:      denom,
 		HasBarLine: false,
 		LeftDelim:  &left,
 		RightDelim: &right,
-	}, nil
+	}
+	return wrapFracStyle(p, cmd, frac), nil
 }
 
 func parseSqrt(p *Parser) (Node, error) {
@@ -285,15 +302,18 @@ func parseSqrt(p *Parser) (Node, error) {
 	p.consumeSpaces()
 	var index Node
 	if p.cur.Text == "[" {
+		startTok := p.cur
 		p.advance()
 		body, err := p.parseExpression(false, "]")
 		if err != nil {
 			return nil, err
 		}
+		endTok := p.cur
 		if err := p.expect("]"); err != nil {
 			return nil, err
 		}
-		index = &OrdGroup{Mode: p.mode, Body: body}
+		loc := source.Range(startTok.Loc, endTok.Loc)
+		index = &OrdGroup{Mode: p.mode, Body: body, Loc: &loc}
 	}
 	body, err := parseFunctionArg(p, `\sqrt`)
 	if err != nil {

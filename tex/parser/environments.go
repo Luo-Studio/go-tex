@@ -134,18 +134,28 @@ func handleAlignedEnv(p *Parser, name string) (Node, error) {
 		return nil, err
 	}
 
-	if isGather || isEquation {
-		// Single centred column.
-		c := "c"
-		cols := []AlignSpec{{Type: AlignTypeAlign, Align: &c}}
+	if isEquation {
 		return &Array{
 			Mode:            p.mode,
 			Body:            rows,
 			RowGaps:         rowGaps,
 			HLinesBeforeRow: buildEmptyHLines(len(rows)),
-			Cols:            cols,
-			AddJot:          boolPtr(false),
 			ArrayStretch:    1.0,
+		}, nil
+	}
+	if isGather {
+		c := "c"
+		cols := []AlignSpec{{Type: AlignTypeAlign, Align: &c}}
+		gatherSep := "gather"
+		return &Array{
+			Mode:              p.mode,
+			Body:              rows,
+			RowGaps:           rowGaps,
+			HLinesBeforeRow:   buildEmptyHLines(len(rows)),
+			Cols:              cols,
+			AddJot:            boolPtr(true),
+			ColSeparationType: &gatherSep,
+			ArrayStretch:      1.0,
 		}, nil
 	}
 
