@@ -472,6 +472,22 @@ func layoutNode(n parser.Node, opts Options) *Box {
 // upstream font-selection rules + the real font-metrics tables.
 func layoutSymbol(text string, mode parser.Mode, opts Options) *Box {
 	ch, _ := decodeFirstRune(text)
+	// Math alphanumeric symbols (U+1D400-U+1D7FF): font is determined
+	// by the ORIGINAL codepoint's block; metrics are looked up at the
+	// ASCII letter/digit slot. Display char remains the original Unicode.
+	// Must check before resolveCodepoint, which folds 𝐀 → ASCII 'A'.
+	if maFont, maMetric := mathAlphanumericFont(ch); maFont != "" {
+		if cm, ok := fontmetrics.LookupWithFallback(maFont, maMetric); ok {
+			advance := cm.Width
+			if mode == parser.ModeMath {
+				advance += cm.Italic
+			}
+			return &Box{
+				Width: advance, Height: cm.Height, Depth: cm.Depth, Color: opts.Color,
+				Content: Glyph{FontID: maFont, CharCode: ch},
+			}
+		}
+	}
 	resolved := resolveCodepoint(text, ch, mode)
 	font := opts.FontOverride
 	if font == "" {
@@ -573,6 +589,70 @@ func selectFont(text string, resolved rune, mode parser.Mode) string {
 
 func isASCIILetter(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+// mathAlphanumericFont maps a Unicode mathematical alphanumeric symbol
+// codepoint (U+1D400-U+1D7FF) to its KaTeX font and the ASCII metric
+// codepoint where the corresponding glyph metrics live. Mirrors
+// upstream font_and_metric_for_mathematical_alphanumeric.
+//
+// Returns ("", 0) when the codepoint isn't in any of these blocks.
+func mathAlphanumericFont(cp rune) (string, rune) {
+	c := uint32(cp)
+	if c <= 0x7F {
+		return "", 0
+	}
+	const letters52 = uint32(52)
+	bases := []struct {
+		base uint32
+		font string
+	}{
+		{0x1D400, "Main-Bold"},
+		{0x1D434, "Math-Italic"},
+		{0x1D468, "Math-BoldItalic"},
+		{0x1D504, "Fraktur-Regular"},
+		{0x1D56C, "Fraktur-Bold"},
+		{0x1D5A0, "SansSerif-Regular"},
+		{0x1D5D4, "SansSerif-Bold"},
+		{0x1D608, "SansSerif-Italic"},
+		{0x1D670, "Typewriter-Regular"},
+	}
+	for _, b := range bases {
+		if c >= b.base && c < b.base+letters52 {
+			i := c - b.base
+			var metric uint32
+			if i < 26 {
+				metric = 0x41 + i
+			} else {
+				metric = 0x61 + (i - 26)
+			}
+			return b.font, rune(metric)
+		}
+	}
+	if c >= 0x1D538 && c < 0x1D538+26 {
+		return "AMS-Regular", rune(0x41 + (c - 0x1D538))
+	}
+	if c >= 0x1D49C && c < 0x1D49C+26 {
+		return "Script-Regular", rune(0x41 + (c - 0x1D49C))
+	}
+	if c == 0x1D55C {
+		return "AMS-Regular", 'k'
+	}
+	digitBases := []struct {
+		base uint32
+		font string
+	}{
+		{0x1D7CE, "Main-Bold"},
+		{0x1D7E2, "SansSerif-Regular"},
+		{0x1D7EC, "SansSerif-Bold"},
+		{0x1D7F6, "Typewriter-Regular"},
+	}
+	for _, b := range digitBases {
+		if c >= b.base && c < b.base+10 {
+			return b.font, rune(0x30 + (c - b.base))
+		}
+	}
+	return "", 0
 }
 
 // missingGlyphWidthEm mirrors upstream missing_glyph_width_em: pick the
