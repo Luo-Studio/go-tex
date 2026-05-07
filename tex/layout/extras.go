@@ -411,6 +411,101 @@ func layoutAccent(a *parser.Accent, opts Options) *Box {
 	}
 }
 
+// layoutXArrow handles \xrightarrow / \xleftarrow / \xleftrightarrow /
+// \xhookleftarrow / \xLeftarrow / \xrightleftharpoons / etc. Mirrors
+// upstream layout_xarrow.
+func layoutXArrow(x *parser.XArrow, opts Options) *Box {
+	supStyle := opts.Style.Superscript()
+	subStyle := opts.Style.Subscript()
+	supRatio := supStyle.SizeMultiplier() / opts.Style.SizeMultiplier()
+	subRatio := subStyle.SizeMultiplier() / opts.Style.SizeMultiplier()
+
+	supOpts := opts.WithStyle(supStyle)
+	bodyBox := layoutNode(x.Body, supOpts)
+	bodyW := bodyBox.Width * supRatio
+
+	var belowBox *Box
+	belowW := 0.0
+	if x.Below != nil {
+		subOpts := opts.WithStyle(subStyle)
+		belowBox = layoutNode(x.Below, subOpts)
+		belowW = belowBox.Width * subRatio
+	}
+
+	minW := 1.0
+	if mw, ok := katexStretchyMinWidthEm(x.Label); ok {
+		minW = mw
+	}
+	upperW := bodyW + supRatio
+	lowerW := 0.0
+	if belowBox != nil {
+		lowerW = belowW + subRatio
+	}
+	arrowW := upperW
+	if lowerW > arrowW {
+		arrowW = lowerW
+	}
+	if minW > arrowW {
+		arrowW = minW
+	}
+
+	arrowH := 0.3
+	cmds, actualH, ok := katexStretchyPath(x.Label, arrowW)
+	fill := true
+	if !ok {
+		// Fallback: empty box, just keep dims.
+		actualH = arrowH
+		cmds = nil
+		fill = false
+	}
+	arrowBox := &Box{
+		Width: arrowW, Height: actualH / 2, Depth: actualH / 2, Color: opts.Color,
+		Content: SvgPath{Commands: cmds, Fill: fill},
+	}
+
+	axis := opts.Metrics().AxisHeight
+	arrowHalf := actualH / 2
+	gap := 0.111
+	baseShift := -axis
+	supKern := gap
+	subKern := gap
+
+	supH := bodyBox.Height * supRatio
+	supD := bodyBox.Depth * supRatio
+
+	height := axis + arrowHalf + gap + supH + supD
+	depth := arrowHalf - axis
+	if depth < 0 {
+		depth = 0
+	}
+	if belowBox != nil {
+		subH := belowBox.Height * subRatio
+		subD := belowBox.Depth * subRatio
+		baseDepth := arrowHalf - axis
+		if baseDepth < 0 {
+			baseDepth = 0
+		}
+		depth = baseDepth + gap + subH + subD
+	}
+	return &Box{
+		Width:  arrowW,
+		Height: height,
+		Depth:  depth,
+		Color:  opts.Color,
+		Content: OpLimits{
+			Base:      arrowBox,
+			Sup:       bodyBox,
+			Sub:       belowBox,
+			BaseShift: baseShift,
+			SupKern:   supKern,
+			SubKern:   subKern,
+			Slant:     0,
+			SupScale:  supRatio,
+			SubScale:  subRatio,
+		},
+	}
+}
+
 // isArrowAccent reports whether label uses a stretchy SVG arrow path
 // (mirrors upstream is_arrow_accent).
 func isArrowAccent(label string) bool {

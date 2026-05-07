@@ -458,9 +458,11 @@ func layoutNode(n parser.Node, opts Options) *Box {
 			Width: inner.Width, Height: h, Depth: d, Color: inner.Color,
 			Content: inner.Content,
 		}
+	case *parser.XArrow:
+		return layoutXArrow(v, opts)
 	case *parser.Cr, *parser.Infix,
 		*parser.LeftRightRight,
-		*parser.XArrow, *parser.Tag:
+		*parser.Tag:
 		// TODO: full layout for these; for now just lay out subtrees we
 		// know how to handle, otherwise empty.
 		return NewEmpty()
