@@ -504,6 +504,28 @@ func parseHBox(p *Parser) (Node, error) {
 // \html@mathml{html}{mathml}
 // =============================================================================
 
+// parseAtChar handles `\@char{N}` — converts the integer N to the
+// matching Unicode codepoint and emits a TextOrd node, mirroring upstream.
+func parseAtChar(p *Parser) (Node, error) {
+	p.advance()
+	arg, err := parseFunctionArg(p, `\@char`)
+	if err != nil {
+		return nil, err
+	}
+	body := OrdArgument(arg)
+	var num strings.Builder
+	for _, n := range body {
+		if t, ok := SymbolText(n); ok {
+			num.WriteString(t)
+		}
+	}
+	var code int
+	if _, err := fmt.Sscanf(num.String(), "%d", &code); err != nil {
+		return nil, errMsg("\\@char has non-numeric argument " + num.String())
+	}
+	return &TextOrd{Mode: p.mode, Text: string(rune(code))}, nil
+}
+
 func parseHtmlMathml(p *Parser) (Node, error) {
 	p.advance()
 	htmlArg, err := parseFunctionArg(p, `\html@mathml`)

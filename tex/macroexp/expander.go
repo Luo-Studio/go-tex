@@ -408,6 +408,7 @@ func defaultMacros() map[string]Definition {
 	m[`\htmlData`] = Definition{Fn: htmlPass}
 	m[`\htmlId`] = Definition{Fn: htmlPass}
 	m[`\htmlStyle`] = Definition{Fn: htmlPass}
+	m[`\char`] = Definition{Fn: handleChar}
 	// Text-form alias: \operatorname → \@ifstar\operatornamewithlimits\operatorname@
 	m[`\operatorname`] = Definition{Text: `\@ifstar\operatornamewithlimits\operatorname@`}
 	// \char: parse a number in decimal/octal/hex/backtick form and emit
@@ -502,6 +503,115 @@ func noExpand(e *Expander) ([]lexer.Token, error) {
 		t.TreatAsRelax = true
 	}
 	return []lexer.Token{t}, nil
+}
+
+// handleChar implements `\char` — parses a number in decimal/octal/hex/
+// backtick form and emits "\@char{N}" tokens for the parser to consume.
+//
+//	\char"3FE   -> hex
+//	\char'277   -> octal
+//	\char`A     -> ASCII codepoint of next char
+//	\char65     -> decimal
+func handleChar(e *Expander) ([]lexer.Token, error) {
+	t := e.pop()
+	for t.IsSpace() {
+		t = e.pop()
+	}
+	if t.IsEOF() {
+		return nil, fmt.Errorf(`\char: unexpected EOF`)
+	}
+	loc := t.Loc
+	var number int64
+	switch t.Text {
+	case "'":
+		t = e.pop()
+		number = parseInBase(t.Text, 8)
+		readMore(e, &number, 8)
+	case `"`:
+		t = e.pop()
+		number = parseInBase(t.Text, 16)
+		readMore(e, &number, 16)
+	case "`":
+		t = e.pop()
+		s := t.Text
+		var ch rune
+		if len(s) > 0 && s[0] == '\\' && len(s) > 1 {
+			for _, r := range s[1:] {
+				ch = r
+				break
+			}
+		} else if len(s) > 0 {
+			for _, r := range s {
+				ch = r
+				break
+			}
+		}
+		number = int64(ch)
+	default:
+		number = parseInBase(t.Text, 10)
+		readMore(e, &number, 10)
+	}
+	s := fmt.Sprintf("%d", number)
+	out := []lexer.Token{
+		{Text: "}", Loc: loc},
+	}
+	for i := len(s) - 1; i >= 0; i-- {
+		out = append(out, lexer.Token{Text: string(s[i]), Loc: loc})
+	}
+	out = append(out, lexer.Token{Text: "{", Loc: loc})
+	out = append(out, lexer.Token{Text: `\@char`, Loc: loc})
+	return out, nil
+}
+
+func parseInBase(s string, base int) int64 {
+	var n int64
+	for _, c := range s {
+		var d int
+		switch {
+		case c >= '0' && c <= '9':
+			d = int(c - '0')
+		case c >= 'a' && c <= 'f':
+			d = int(c-'a') + 10
+		case c >= 'A' && c <= 'F':
+			d = int(c-'A') + 10
+		default:
+			return n
+		}
+		if d >= base {
+			return n
+		}
+		n = n*int64(base) + int64(d)
+	}
+	return n
+}
+
+func readMore(e *Expander, n *int64, base int) {
+	for {
+		t := e.Future()
+		// Only single-char digit tokens contribute.
+		if len(t.Text) != 1 {
+			return
+		}
+		c := t.Text[0]
+		if !isDigitForBase(c, base) {
+			return
+		}
+		more := parseInBase(t.Text, base)
+		e.pop()
+		*n = (*n)*int64(base) + more
+	}
+}
+
+func isDigitForBase(c byte, base int) bool {
+	switch {
+	case c >= '0' && c <= '9':
+		return int(c-'0') < base
+	case c >= 'a' && c <= 'f':
+		return base > 10 && int(c-'a')+10 < base
+	case c >= 'A' && c <= 'F':
+		return base > 10 && int(c-'A')+10 < base
+	}
+	return false
 }
 
 func discardOneArg(e *Expander) ([]lexer.Token, error) {
