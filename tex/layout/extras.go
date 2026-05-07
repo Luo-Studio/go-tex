@@ -418,10 +418,20 @@ func layoutSqrt(s *parser.Sqrt, opts Options) *Box {
 
 // layoutLeftRight: lay out the inner, then pick stretchy delimiters
 // from the Size1-Size4 family to wrap it. Mirrors upstream's
-// layout_left_right + make_stretchy_delim.
+// layout_left_right + make_stretchy_delim. When the inner contains a
+// \middle node, do a two-pass layout: first measure inner with
+// LeftRightDelimHeight=nil (Middle reserves width only), then re-lay
+// out with the computed total height so Middle delims pick the right
+// stretchy size.
 func layoutLeftRight(lr *parser.LeftRight, opts Options) *Box {
+	hasMiddle := nodesContainMiddle(lr.Body)
 	inner := layoutExpression(lr.Body, opts, true)
 	totalH := leftRightDelimTotalHeight(inner, opts)
+	if hasMiddle {
+		secondOpts := opts
+		secondOpts.LeftRightDelimHeight = &totalH
+		inner = layoutExpression(lr.Body, secondOpts, true)
+	}
 	left := makeStretchyDelim(lr.Left, totalH, opts)
 	right := makeStretchyDelim(lr.Right, totalH, opts)
 	w := left.Width + inner.Width + right.Width
@@ -431,6 +441,35 @@ func layoutLeftRight(lr *parser.LeftRight, opts Options) *Box {
 		Width: w, Height: h, Depth: d, Color: opts.Color,
 		Content: LeftRight{Left: left, Inner: inner, Right: right},
 	}
+}
+
+func nodesContainMiddle(nodes []parser.Node) bool {
+	for _, n := range nodes {
+		if nodeContainsMiddle(n) {
+			return true
+		}
+	}
+	return false
+}
+
+func nodeContainsMiddle(n parser.Node) bool {
+	switch v := n.(type) {
+	case *parser.Middle:
+		return true
+	case *parser.OrdGroup:
+		return nodesContainMiddle(v.Body)
+	case *parser.MClass:
+		return nodesContainMiddle(v.Body)
+	case *parser.Color:
+		return nodesContainMiddle(v.Body)
+	case *parser.Styling:
+		return nodesContainMiddle(v.Body)
+	case *parser.Sizing:
+		return nodesContainMiddle(v.Body)
+	case *parser.Font:
+		return nodeContainsMiddle(v.Body)
+	}
+	return false
 }
 
 func leftRightDelimTotalHeight(inner *Box, opts Options) float64 {
@@ -480,7 +519,7 @@ func delimChar(delim string) (rune, bool) {
 	case `\backslash`:
 		return '\\', true
 	case "|", `\vert`, `\lvert`, `\rvert`:
-		return '|', true
+		return 0x2223, true // ∣ DIVIDES (KaTeX uses U+2223 for vertical bars)
 	case `\|`, `\Vert`, `\lVert`, `\rVert`:
 		return 0x2225, true // ‖
 	case `\langle`, "<", `\lt`:

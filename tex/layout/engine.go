@@ -435,7 +435,17 @@ func layoutNode(n parser.Node, opts Options) *Box {
 			Color:   opts.Color,
 			Content: hbox.Content,
 		}
-	case *parser.Cr, *parser.Infix, *parser.Middle,
+	case *parser.Middle:
+		// In the second pass of \left...\right, opts.LeftRightDelimHeight
+		// is set, and we lay out the middle delim at that height. In the
+		// first pass it's nil — reserve the width but produce a 0-height
+		// placeholder so the inner box's height computation is unaffected.
+		if opts.LeftRightDelimHeight != nil {
+			return makeStretchyDelim(v.Delim, *opts.LeftRightDelimHeight, opts)
+		}
+		placeholder := makeStretchyDelim(v.Delim, 1.0, opts)
+		return &Box{Width: placeholder.Width, Color: opts.Color, Content: Empty{}}
+	case *parser.Cr, *parser.Infix,
 		*parser.LeftRightRight,
 		*parser.XArrow, *parser.VCenter, *parser.Tag:
 		// TODO: full layout for these; for now just lay out subtrees we
