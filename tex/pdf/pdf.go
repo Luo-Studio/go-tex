@@ -34,13 +34,16 @@ import (
 // Options configure the rendered PDF.
 type Options struct {
 	// FontSize is the points-per-em conversion; with FontSize=12 a
-	// glyph rendered at scale 1.0 prints at 12pt.
+	// glyph rendered at scale 1.0 prints at 12pt. fpdf's SetFont
+	// always interprets size as points regardless of the document's
+	// unit, so this is independent of doc units.
 	FontSize float64
-	// Padding is added on every side of the bounding box. For DrawInto
-	// it shifts the math inward from the supplied (x, y); set to 0 for
-	// flush placement.
+	// Padding is added on every side of the bounding box, in the
+	// document's units (points by default; mm if the embedding doc
+	// was created with UnitStr="mm"). For DrawInto it shifts the math
+	// inward from the supplied (x, y); set to 0 for flush placement.
 	Padding float64
-	// StrokeWidth is the line width for un-filled paths.
+	// StrokeWidth is the line width for un-filled paths, in document units.
 	StrokeWidth float64
 }
 
@@ -58,12 +61,31 @@ func EmbedDefaults() Options {
 	return Options{FontSize: 12, Padding: 0, StrokeWidth: 0.5}
 }
 
-// Size returns the rendered math's outer dimensions in fpdf units
-// (typically points) including Padding on all four sides. Useful for
-// laying out an embedded equation before calling [DrawInto].
+// Size returns the rendered math's outer dimensions in points,
+// assuming the embedding document also uses points (the case for
+// [Render] / [RenderTo]). Padding is added on all four sides.
+//
+// For embedding into a non-point document (e.g. one created with
+// UnitStr="mm"), use [SizeForDoc] instead — the conversion ratio
+// between em-units and doc-units is only known at draw time.
 func Size(dl layout.DisplayList, opts Options) (w, h float64) {
-	w = dl.Width*opts.FontSize + 2*opts.Padding
-	h = (dl.Height+dl.Depth)*opts.FontSize + 2*opts.Padding
+	return sizeWithEm(dl, opts, opts.FontSize)
+}
+
+// SizeForDoc returns the rendered math's outer dimensions in pdf's
+// native unit (points, mm, ...). It accounts for the document's
+// unit/point conversion ratio so that a 12pt expression embedded in
+// an mm document reports its size in mm.
+func SizeForDoc(pdf *fpdf.Fpdf, dl layout.DisplayList, opts Options) (w, h float64) {
+	if pdf == nil {
+		return Size(dl, opts)
+	}
+	return sizeWithEm(dl, opts, emInDocUnits(pdf, opts))
+}
+
+func sizeWithEm(dl layout.DisplayList, opts Options, em float64) (w, h float64) {
+	w = dl.Width*em + 2*opts.Padding
+	h = (dl.Height+dl.Depth)*em + 2*opts.Padding
 	if w < 1 {
 		w = 1
 	}
@@ -71,6 +93,18 @@ func Size(dl layout.DisplayList, opts Options) (w, h float64) {
 		h = 1
 	}
 	return w, h
+}
+
+// emInDocUnits converts the point-valued FontSize into the embedding
+// document's units. fpdf's GetConversionRatio returns user-units per
+// point (1.0 for "pt", ~2.835 for "mm", etc.), so dividing point sizes
+// by it gives doc-unit-equivalents.
+func emInDocUnits(pdf *fpdf.Fpdf, opts Options) float64 {
+	k := pdf.GetConversionRatio()
+	if k == 0 {
+		return opts.FontSize
+	}
+	return opts.FontSize / k
 }
 
 // Render generates a single-page PDF from the DisplayList and returns
@@ -121,16 +155,17 @@ func DrawInto(pdf *fpdf.Fpdf, dl layout.DisplayList, x, y float64, opts Options)
 	if err := RegisterFonts(pdf); err != nil {
 		return err
 	}
+	em := emInDocUnits(pdf, opts)
 	for _, item := range dl.Items {
 		switch v := item.(type) {
 		case layout.GlyphPath:
-			drawGlyph(pdf, v, x, y, opts)
+			drawGlyph(pdf, v, x, y, opts, em)
 		case layout.Rect:
 			drawRect(pdf, v)
 		case layout.Line:
-			drawLine(pdf, v, x, y, opts)
+			drawLine(pdf, v, x, y, opts, em)
 		case layout.PathItem:
-			drawPath(pdf, v, x, y, opts)
+			drawPath(pdf, v, x, y, opts, em)
 		}
 	}
 	return pdf.Error()
@@ -188,16 +223,16 @@ func ttfBytes(fontID string) ([]byte, error) {
 	return b, nil
 }
 
-func drawGlyph(pdf *fpdf.Fpdf, g layout.GlyphPath, ox, oy float64, opts Options) {
+func drawGlyph(pdf *fpdf.Fpdf, g layout.GlyphPath, ox, oy float64, opts Options, em float64) {
 	if _, err := ttfBytes(g.Font); err != nil {
 		// Unknown font (e.g. CJK-Regular) — skip silently rather than
 		// failing the entire render.
 		return
 	}
-	em := opts.FontSize * g.Scale
-	x := ox + g.X*opts.FontSize + opts.Padding
-	y := oy + g.Y*opts.FontSize + opts.Padding
-	pdf.SetFont(g.Font, "", em)
+	pts := opts.FontSize * g.Scale
+	x := ox + g.X*em + opts.Padding
+	y := oy + g.Y*em + opts.Padding
+	pdf.SetFont(g.Font, "", pts)
 	pdf.SetTextColor(int(g.Color.R), int(g.Color.G), int(g.Color.B))
 	pdf.Text(x, y, string(g.CharCode))
 }
@@ -210,8 +245,7 @@ func drawRect(pdf *fpdf.Fpdf, r layout.Rect) {
 	pdf.Rect(r.X, r.Y, r.Width, r.Height, "F")
 }
 
-func drawLine(pdf *fpdf.Fpdf, l layout.Line, ox, oy float64, opts Options) {
-	em := opts.FontSize
+func drawLine(pdf *fpdf.Fpdf, l layout.Line, ox, oy float64, opts Options, em float64) {
 	t := l.Thickness * em
 	if t < 1e-6 {
 		t = 1e-6
@@ -233,8 +267,7 @@ func drawLine(pdf *fpdf.Fpdf, l layout.Line, ox, oy float64, opts Options) {
 	pdf.Rect(x0, y0, w, t, "F")
 }
 
-func drawPath(pdf *fpdf.Fpdf, p layout.PathItem, ox, oy float64, opts Options) {
-	em := opts.FontSize
+func drawPath(pdf *fpdf.Fpdf, p layout.PathItem, ox, oy float64, opts Options, em float64) {
 	x0 := ox + p.X*em + opts.Padding
 	y0 := oy + p.Y*em + opts.Padding
 	first := true
