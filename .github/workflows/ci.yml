@@ -32,34 +32,7 @@ jobs:
         run: go build ./...
 
       # Parity tests against the upstream RaTeX Rust binaries skip
-      # cleanly when RATEX_TARGET_DIR is unset, so the rest of the
-      # suite still runs in CI. Tests are split per package so the
-      # failing step name surfaces in the PR check UI.
-      - name: Test cmd/lex
-        run: go test -v ./cmd/lex
-      - name: Test internal/parity
-        run: go test -v ./internal/parity
-      - name: Test tex/lexer
-        run: go test -v ./tex/lexer
-      - name: Test tex/parser
-        run: go test -v ./tex/parser
-      - name: Test tex/symbols
-        run: go test -v ./tex/symbols
-      - name: Test tex/fontmetrics
-        run: go test -v ./tex/fontmetrics
-      - name: Test tex/mathstyle
-        run: go test -v ./tex/mathstyle
-      - name: Test tex/path
-        run: go test -v ./tex/path
-      - name: Test tex/source
-        run: go test -v ./tex/source
-      - name: Test tex/layout
-        run: go test -v ./tex/layout
-      - name: Test tex/svg
-        run: go test -v ./tex/svg
-      - name: Test tex/mhchem
-        run: go test -v ./tex/mhchem
-      - name: Test tex/pdf
-        run: go test -v ./tex/pdf
-      - name: Test tex/render
-        run: go test -v ./tex/render
+      # cleanly when RATEX_LEX / RATEX_TARGET_DIR are unset, so the rest
+      # of the suite still runs in CI.
+      - name: Test
+        run: go test ./...

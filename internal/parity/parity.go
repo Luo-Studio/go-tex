@@ -5,7 +5,6 @@ package parity
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 )
 
@@ -14,10 +13,11 @@ import (
 //
 //  1. The environment variable named upper(name) (e.g. RATEX_LEX for "lex").
 //  2. $RATEX_TARGET_DIR/release/<name>.
-//  3. The system PATH.
 //
 // It returns the resolved absolute path or an empty string if nothing was
-// found.
+// found. PATH is intentionally not consulted: names like "lex" and "parse"
+// collide with unrelated Unix utilities (flex's lex, etc.) and would cause
+// parity tests to feed LaTeX into the wrong program rather than skipping.
 func FindUpstreamBin(name string) string {
 	envName := envVarFor(name)
 	if p := os.Getenv(envName); p != "" {
@@ -33,9 +33,6 @@ func FindUpstreamBin(name string) string {
 			abs, _ := filepath.Abs(candidate)
 			return abs
 		}
-	}
-	if p, err := exec.LookPath(name); err == nil {
-		return p
 	}
 	return ""
 }
