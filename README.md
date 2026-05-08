@@ -86,6 +86,118 @@ system". go-tex now has **end-to-end PNG rendering** for math expressions
 through pure Go (no native deps), with parser coverage matching upstream
 RaTeX's >99% KaTeX support.
 
+## Using the Go API
+
+Install with:
+
+```
+go get github.com/luo-studio/go-tex
+```
+
+Every renderer takes the same input — a `layout.DisplayList` produced from
+parsed LaTeX:
+
+```go
+import (
+    "github.com/luo-studio/go-tex/tex/layout"
+    "github.com/luo-studio/go-tex/tex/parser"
+)
+
+nodes, err := parser.Parse(`\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt\pi}{2}`)
+if err != nil {
+    log.Fatal(err)
+}
+dl := layout.ToDisplayList(layout.Layout(nodes, layout.DefaultOptions()))
+```
+
+### PNG rasterisation (`tex/render`)
+
+Render a `DisplayList` to a PNG using embedded KaTeX TTFs and tdewolff/canvas
+— pure Go, no native deps:
+
+```go
+import "github.com/luo-studio/go-tex/tex/render"
+
+png, err := render.PNG(dl)
+if err != nil {
+    log.Fatal(err)
+}
+os.WriteFile("eq.png", png, 0o644)
+```
+
+Stream straight to a writer with `render.PNGTo`, and tune output via the
+functional options:
+
+```go
+f, _ := os.Create("eq@2x.png")
+defer f.Close()
+err := render.PNGTo(f, dl,
+    render.WithFontSize(40),    // user-units per em (default 40)
+    render.WithPadding(10),     // padding around the bounding box
+    render.WithStrokeWidth(1.5),
+    render.WithScale(2.0),      // 2x for HiDPI
+)
+```
+
+### Standalone PDF (`tex/pdf`)
+
+`pdf.Render` produces a single-page PDF whose page is sized exactly to the
+math plus padding:
+
+```go
+import "github.com/luo-studio/go-tex/tex/pdf"
+
+bytes, err := pdf.Render(dl, pdf.DefaultOptions())
+if err != nil {
+    log.Fatal(err)
+}
+os.WriteFile("eq.pdf", bytes, 0o644)
+```
+
+`pdf.RenderTo(w, dl, opts)` writes to an `io.Writer` directly. `pdf.Options`
+controls `FontSize` (points), `Padding` (in document units), and
+`StrokeWidth`.
+
+### Embedding into an existing PDF (`pdf.DrawInto`)
+
+To place rendered math inside a larger document you already control, hand
+the `*fpdf.Fpdf` to `pdf.DrawInto`. KaTeX TTFs are registered into the
+document on first use and reused thereafter:
+
+```go
+import (
+    "codeberg.org/go-pdf/fpdf"
+    "github.com/luo-studio/go-tex/tex/pdf"
+)
+
+doc := fpdf.New("P", "pt", "A4", "")
+doc.SetMargins(36, 36, 36)
+doc.AddPage()
+
+doc.SetFont("Arial", "", 14)
+doc.Cell(0, 20, "Equations:")
+
+opts := pdf.EmbedDefaults()
+opts.FontSize = 14
+
+// Place the equation at (60, 80) on the page.
+if err := pdf.DrawInto(doc, dl, 60, 80, opts); err != nil {
+    log.Fatal(err)
+}
+
+// Stack a second equation below the first using the reported size.
+_, h := pdf.Size(dl, opts)
+if err := pdf.DrawInto(doc, dl2, 60, 80+h+20, opts); err != nil {
+    log.Fatal(err)
+}
+
+doc.OutputFileAndClose("paper.pdf")
+```
+
+Use `pdf.SizeForDoc(doc, dl, opts)` instead of `pdf.Size` when the embedding
+document was created with non-point units (e.g. `UnitStr: "mm"`); it applies
+fpdf's conversion ratio so the returned size matches the document's units.
+
 ## Running tests
 
 ```
